@@ -1,6 +1,8 @@
 # Rustino
 
-Cross-platform native desktop windows with embedded web views, powered by **Rust**. Drop-in replacement for [Photino.NET](https://tryphotino.io).
+Cross-platform native desktop windows with embedded web views, powered by **Rust**. 
+
+Inspired by [Photino.NET](https://tryphotino.io).
 
 Rustino replaces Photino's C++ native layer with Rust, using [wry](https://github.com/nicbarker/gaia) for the webview and [tao](https://github.com/nicbarker/gaia) for window management — the same libraries that power [Tauri](https://tauri.app).
 
@@ -66,6 +68,7 @@ All `.Set*()`, `.Center()`, `.Load()`, and `.WaitForClose()` calls remain the sa
 | `SetMaximized(bool)` | Start maximized |
 | `SetBackgroundColor(r, g, b, a)` | Set webview background color |
 | `SetIconFile(string)` | Set window icon from .ico/.png file path |
+| `SetIcon(Stream)` | Set window icon from a .NET stream (e.g. embedded resource) |
 | `Center()` | Center window on the primary monitor |
 | `SetDevToolsEnabled(bool)` | Enable browser developer tools |
 | `SetJavascriptClipboardAccessEnabled(bool)` | Allow JS clipboard access |
@@ -94,6 +97,7 @@ All `.Set*()`, `.Center()`, `.Load()`, and `.WaitForClose()` calls remain the sa
 | `SendWebMessage(string)` | Post a message to the webview |
 | `SetZoom(double)` | Set webview zoom factor |
 | `WaitForClose()` | Block until the window is closed |
+| `Dispose()` | Release native resources (`RustinoWindow` implements `IDisposable`) |
 
 ### Dialogs
 
@@ -131,8 +135,13 @@ Native cross-platform toast notifications (powered by [notify-rust](https://gith
 // Static — no window instance required
 RustinoWindow.ShowNotification("Download Complete", "Your file has been saved.");
 
-// With icon
+// With icon (file path)
 RustinoWindow.ShowNotification("Alert", "Something happened", iconPath: "/path/to/icon.png");
+
+// With icon (embedded resource stream)
+using var stream = Assembly.GetExecutingAssembly()
+    .GetManifestResourceStream("MyApp.notify.png")!;
+RustinoWindow.ShowNotification("Alert", "Something happened", stream);
 ```
 
 Uses WinRT Toast (Windows), NSUserNotification (macOS), and D-Bus (Linux).
@@ -287,6 +296,14 @@ window.WhenWebMessageWithPrefix("cmd:")
 // Page load completion only
 window.WhenPageLoadCompleted()
     .Subscribe(e => Console.WriteLine($"Loaded: {e.Url}"));
+
+// Throttled move events
+window.WhenLocationChangedThrottled(TimeSpan.FromMilliseconds(100))
+    .Subscribe(pos => Console.WriteLine($"Moved to {pos.X},{pos.Y}"));
+
+// Distinct focus changes
+window.WhenFocusChangedDistinct()
+    .Subscribe(focused => Console.WriteLine($"Focus: {focused}"));
 ```
 
 ## Building from Source
@@ -322,19 +339,6 @@ dotnet run
 | Windows x64/ARM64 | WebView2 (Chromium) | `rustino_native.dll` |
 | macOS x64/ARM64 | WKWebView (WebKit) | `librustino_native.dylib` |
 | Linux x64/ARM64 | WebKitGTK | `librustino_native.so` |
-
-## Samples
-
-- **HelloWorld** — Load a URL in a window
-- **HtmlContent** — Load local HTML from a temp file
-- **JsInterop** — Bidirectional JavaScript ↔ C# messaging
-- **FeatureShowcase** — Interactive demo of events, IPC, window state, and zoom
-- **AllOptions** — Every configuration option and runtime operation
-- **Dialogs** — Native file open, save, and folder selection dialogs
-- **Notifications** — OS-native toast notifications
-- **Menus** — Application menu bar, context menus, and system tray icon
-- **Monitors** — Multi-monitor enumeration with DPI-aware positioning
-- **Reactive** — IObservable streams with System.Reactive operators
 
 ## License
 
