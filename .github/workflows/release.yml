@@ -1,0 +1,213 @@
+name: Release NuGet
+
+permissions:
+  contents: write
+  id-token: write
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            lib: rustino_native.dll
+          - rid: win-arm64
+            target: aarch64-pc-windows-msvc
+            os: windows-latest
+            lib: rustino_native.dll
+          - rid: linux-x64
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            lib: librustino_native.so
+          - rid: osx-x64
+            target: x86_64-apple-darwin
+            os: macos-13
+            lib: librustino_native.dylib
+          - rid: osx-arm64
+            target: aarch64-apple-darwin
+            os: macos-latest
+            lib: librustino_native.dylib
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+
+      - name: Build native library
+        working-directory: src/Rustino.Native
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: src/Rustino.Native/target/${{ matrix.target }}/release/${{ matrix.lib }}
+
+  pack-sign-publish:
+    needs: build-native
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: native-artifacts
+
+      - name: Stage native binaries into runtimes
+        run: |
+          mkdir -p Rustino.NET/runtimes/win-x64/native
+          mkdir -p Rustino.NET/runtimes/win-arm64/native
+          mkdir -p Rustino.NET/runtimes/linux-x64/native
+          mkdir -p Rustino.NET/runtimes/osx-x64/native
+          mkdir -p Rustino.NET/runtimes/osx-arm64/native
+
+          cp ../native-artifacts/native-win-x64/rustino_native.dll     Rustino.NET/runtimes/win-x64/native/
+          cp ../native-artifacts/native-win-arm64/rustino_native.dll   Rustino.NET/runtimes/win-arm64/native/
+          cp ../native-artifacts/native-linux-x64/librustino_native.so Rustino.NET/runtimes/linux-x64/native/
+          cp ../native-artifacts/native-osx-x64/librustino_native.dylib   Rustino.NET/runtimes/osx-x64/native/
+          cp ../native-artifacts/native-osx-arm64/librustino_native.dylib Rustino.NET/runtimes/osx-arm64/native/
+
+          echo "Staged native binaries:"
+          find Rustino.NET/runtimes -type f
+
+      - name: Sign Windows native binaries
+        uses: sslcom/esigner-codesign@develop
+        with:
+          command: batch_sign
+          username: ${{ secrets.SSL_COM_USERNAME }}
+          password: ${{ secrets.SSL_COM_PASSWORD }}
+          credential_id: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          malware_block: true
+          dir_path: src/Rustino.NET/runtimes/win-x64/native
+          output_path: src/Rustino.NET/runtimes/win-x64/native
+
+      - name: Sign Windows ARM64 native binaries
+        uses: sslcom/esigner-codesign@develop
+        with:
+          command: batch_sign
+          username: ${{ secrets.SSL_COM_USERNAME }}
+          password: ${{ secrets.SSL_COM_PASSWORD }}
+          credential_id: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          malware_block: true
+          dir_path: src/Rustino.NET/runtimes/win-arm64/native
+          output_path: src/Rustino.NET/runtimes/win-arm64/native
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          else
+            VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props || echo "0.1.0")
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Pack NuGet packages
+        run: |
+          dotnet pack Rustino.NET/Rustino.NET.csproj \
+            --configuration Release \
+            --output ./nupkg \
+            /p:Version=${{ steps.version.outputs.version }}
+
+          dotnet pack Rustino.NET.Reactive/Rustino.NET.Reactive.csproj \
+            --configuration Release \
+            --output ./nupkg \
+            /p:Version=${{ steps.version.outputs.version }}
+
+          echo "Packed NuGet packages:"
+          ls -la ./nupkg/
+
+      - name: Clean NuGet output before signing
+        run: |
+          find ./nupkg -mindepth 1 -maxdepth 1 -not -name "*.nupkg" -exec rm -rf {} +
+          mkdir -p ./nupkg_signed
+
+      - name: Sign NuGet packages
+        uses: sslcom/esigner-codesign@develop
+        with:
+          command: batch_sign
+          username: ${{ secrets.SSL_COM_USERNAME }}
+          password: ${{ secrets.SSL_COM_PASSWORD }}
+          credential_id: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          malware_block: true
+          dir_path: src/nupkg
+          output_path: src/nupkg_signed
+
+      - name: Overwrite with signed packages
+        run: cp -f ./nupkg_signed/*.nupkg ./nupkg/
+
+      - name: Push to NuGet.org
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Upload NuGet packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: src/nupkg/*.nupkg
+
+      - name: Attach packages to GitHub release
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd nupkg
+          for f in *.nupkg; do
+            gh release upload "${{ github.event.release.tag_name }}" "$f" --repo "${{ github.repository }}"
+          done
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "## Rustino NuGet Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Version: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          for rid in win-x64 win-arm64 linux-x64 osx-x64 osx-arm64; do
+            if [ -d "Rustino.NET/runtimes/$rid" ]; then
+              echo "| $rid | Included |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Packages:**" >> $GITHUB_STEP_SUMMARY
+          echo "- [Rustino.NET](https://www.nuget.org/packages/Rustino.NET)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Rustino.NET.Reactive](https://www.nuget.org/packages/Rustino.NET.Reactive)" >> $GITHUB_STEP_SUMMARY

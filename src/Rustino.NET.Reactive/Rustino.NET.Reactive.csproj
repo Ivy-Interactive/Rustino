@@ -6,7 +6,12 @@
     <Nullable>enable</Nullable>
     <PackageId>Rustino.NET.Reactive</PackageId>
     <Description>System.Reactive extensions for Rustino.NET window events.</Description>
+    <Authors>Ivy Interactive</Authors>
+    <Company>Ivy Interactive</Company>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Ivy-Interactive/Rustino</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Ivy-Interactive/Rustino</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 

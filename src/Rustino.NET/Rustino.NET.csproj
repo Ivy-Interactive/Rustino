@@ -6,36 +6,49 @@
     <Nullable>enable</Nullable>
     <PackageId>Rustino.NET</PackageId>
     <Description>Cross-platform native webview windows powered by Rust (wry/tao). Drop-in replacement for Photino.NET.</Description>
+    <Authors>Ivy Interactive</Authors>
+    <Company>Ivy Interactive</Company>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Ivy-Interactive/Rustino</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Ivy-Interactive/Rustino</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <IsPackable>true</IsPackable>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
-  <!-- Native library: local dev (current platform) -->
+  <!-- Native library: local dev (current platform, not packed into NuGet) -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <Content Include="../Rustino.Native/target/release/rustino_native.dll"
+             Pack="false"
              CopyToOutputDirectory="PreserveNewest"
              Link="rustino_native.dll"
              Condition="Exists('../Rustino.Native/target/release/rustino_native.dll')" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <Content Include="../Rustino.Native/target/release/librustino_native.dylib"
+             Pack="false"
              CopyToOutputDirectory="PreserveNewest"
              Link="librustino_native.dylib"
              Condition="Exists('../Rustino.Native/target/release/librustino_native.dylib')" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
     <Content Include="../Rustino.Native/target/release/librustino_native.so"
+             Pack="false"
              CopyToOutputDirectory="PreserveNewest"
              Link="librustino_native.so"
              Condition="Exists('../Rustino.Native/target/release/librustino_native.so')" />
+  </ItemGroup>
+
+  <!-- CI: cross-platform native binaries staged into runtimes/ before pack -->
+  <ItemGroup Condition="Exists('runtimes/')">
+    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/" />
   </ItemGroup>
 
   <!-- NuGet packaging -->
   <ItemGroup>
     <None Include="build/Rustino.NET.targets" Pack="true" PackagePath="build/Rustino.NET.targets" />
     <None Include="build/Rustino.NET.targets" Pack="true" PackagePath="buildTransitive/Rustino.NET.targets" />
-    <None Include="../README.md" Pack="true" PackagePath="\" />
+    <None Include="../../README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
