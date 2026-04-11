@@ -12,6 +12,8 @@ pub struct RustinoCallbacks {
     pub on_web_message: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
     pub on_page_load: Option<unsafe extern "C" fn(*mut c_void, i32, *const c_char)>,
     pub on_navigation: Option<unsafe extern "C" fn(*mut c_void, *const c_char) -> i32>,
+    pub on_menu_item_clicked: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
+    pub on_tray_icon_clicked: Option<unsafe extern "C" fn(*mut c_void)>,
 }
 
 impl Default for RustinoCallbacks {
@@ -26,6 +28,8 @@ impl Default for RustinoCallbacks {
             on_web_message: None,
             on_page_load: None,
             on_navigation: None,
+            on_menu_item_clicked: None,
+            on_tray_icon_clicked: None,
         }
     }
 }
@@ -46,6 +50,8 @@ mod tests {
         assert!(cb.on_web_message.is_none());
         assert!(cb.on_page_load.is_none());
         assert!(cb.on_navigation.is_none());
+        assert!(cb.on_menu_item_clicked.is_none());
+        assert!(cb.on_tray_icon_clicked.is_none());
     }
 
     #[test]

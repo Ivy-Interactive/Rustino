@@ -137,6 +137,92 @@ RustinoWindow.ShowNotification("Alert", "Something happened", iconPath: "/path/t
 
 Uses WinRT Toast (Windows), NSUserNotification (macOS), and D-Bus (Linux).
 
+### Menus
+
+Native cross-platform application menus and context menus (powered by [muda](https://github.com/nicbarker/gaia)):
+
+```csharp
+// Application menu bar
+var menu = new RustinoMenu()
+    .AddSubmenu("File", file => file
+        .AddItem("new", "New", accelerator: "CmdOrCtrl+N")
+        .AddItem("open", "Open...", accelerator: "CmdOrCtrl+O")
+        .AddSeparator()
+        .AddItem("exit", "Exit"))
+    .AddSubmenu("Edit", edit => edit
+        .AddItem("undo", "Undo", accelerator: "CmdOrCtrl+Z")
+        .AddItem("redo", "Redo", accelerator: "CmdOrCtrl+Y")
+        .AddSeparator()
+        .AddCheckItem("wordwrap", "Word Wrap", isChecked: true))
+    .AddSubmenu("Help", help => help
+        .AddItem("about", "About"));
+
+window.SetMenu(menu);
+
+// Context menu (right-click)
+var ctx = new RustinoMenu()
+    .AddItem("cut", "Cut")
+    .AddItem("copy", "Copy")
+    .AddItem("paste", "Paste");
+
+window.ShowContextMenu(ctx);
+
+// Handle clicks
+window.MenuItemClicked += (_, id) => Console.WriteLine($"Clicked: {id}");
+
+// Remove menu bar
+window.RemoveMenu();
+```
+
+### System Tray
+
+Native cross-platform system tray icon with optional context menu (powered by [tray-icon](https://github.com/nicbarker/gaia)):
+
+```csharp
+// Tray icon with tooltip and context menu
+var trayMenu = new RustinoMenu()
+    .AddItem("show", "Show Window")
+    .AddItem("hide", "Hide Window")
+    .AddSeparator()
+    .AddItem("quit", "Quit");
+
+window.SetTrayIcon("icon.png", tooltip: "My App", menu: trayMenu);
+
+// From embedded resource (Stream)
+using var stream = Assembly.GetExecutingAssembly()
+    .GetManifestResourceStream("MyApp.tray.png")!;
+window.SetTrayIcon(stream, tooltip: "My App", menu: trayMenu);
+
+// Handle tray icon clicks
+window.TrayIconClicked += (_, _) => window.SetVisible(true);
+
+// Remove tray icon
+window.RemoveTrayIcon();
+```
+
+### Monitors
+
+Enumerate connected displays with position, resolution, and DPI scale factor:
+
+```csharp
+// Get all monitors
+MonitorInfo[] monitors = window.GetMonitors();
+foreach (var m in monitors)
+    Console.WriteLine($"{m.Name}: {m.Width}x{m.Height} at ({m.X},{m.Y}), scale={m.ScaleFactor}, primary={m.IsPrimary}");
+
+// Get the monitor containing this window
+MonitorInfo? current = window.GetCurrentMonitor();
+
+// DPI-aware positioning: center window on a specific monitor
+var target = monitors.First(m => !m.IsPrimary);
+var (w, h) = window.GetSize();
+window.SetPosition(
+    target.X + (target.Width - w) / 2,
+    target.Y + (target.Height - h) / 2);
+```
+
+`MonitorInfo` properties: `Name`, `X`, `Y`, `Width`, `Height`, `ScaleFactor`, `IsPrimary`.
+
 ### State Queries
 
 | Property | Description |
@@ -146,6 +232,8 @@ Uses WinRT Toast (Windows), NSUserNotification (macOS), and D-Bus (Linux).
 | `IsFullscreen` | Whether the window is in fullscreen |
 | `GetPosition()` | Returns `(X, Y)` position |
 | `GetSize()` | Returns `(Width, Height)` size |
+| `GetMonitors()` | Returns all connected `MonitorInfo[]` |
+| `GetCurrentMonitor()` | Returns `MonitorInfo?` for the monitor containing the window |
 
 ### Events
 
@@ -159,6 +247,8 @@ Uses WinRT Toast (Windows), NSUserNotification (macOS), and D-Bus (Linux).
 | `WebMessageReceived` | `string` | Fired when JS calls `window.ipc.postMessage(msg)` |
 | `PageLoaded` | `PageLoadEventArgs` | Fired on page load start/finish (`.IsStarted`, `.Url`) |
 | `Navigating` | `NavigationEventArgs` | Fired before navigation (`.Url`, set `Cancel = true` to block) |
+| `MenuItemClicked` | `string` | Fired when a menu item is clicked (the item's ID) |
+| `TrayIconClicked` | `EventArgs` | Fired when the system tray icon is clicked |
 
 ### Observable Streams (IObservable&lt;T&gt;)
 
@@ -173,6 +263,8 @@ All events are also available as `IObservable<T>` properties for reactive progra
 | `WhenPageLoaded` | `IObservable<PageLoadEventArgs>` | Page load stream |
 | `WhenNavigating` | `IObservable<NavigationEventArgs>` | Navigation stream |
 | `WhenWindowClosed` | `IObservable<EventArgs>` | Window closed stream |
+| `WhenMenuItemClicked` | `IObservable<string>` | Menu item click stream |
+| `WhenTrayIconClicked` | `IObservable<EventArgs>` | Tray icon click stream |
 
 All streams complete automatically when the window closes or is disposed.
 
@@ -238,6 +330,10 @@ dotnet run
 - **JsInterop** — Bidirectional JavaScript ↔ C# messaging
 - **FeatureShowcase** — Interactive demo of events, IPC, window state, and zoom
 - **AllOptions** — Every configuration option and runtime operation
+- **Dialogs** — Native file open, save, and folder selection dialogs
+- **Notifications** — OS-native toast notifications
+- **Menus** — Application menu bar, context menus, and system tray icon
+- **Monitors** — Multi-monitor enumeration with DPI-aware positioning
 - **Reactive** — IObservable streams with System.Reactive operators
 
 ## License

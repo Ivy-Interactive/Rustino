@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 
+use muda::MenuId;
 use tao::dpi::{PhysicalPosition, PhysicalSize};
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
@@ -18,6 +20,7 @@ use crate::callbacks::RustinoCallbacks;
 use crate::commands::{DialogParams, RustinoCommand};
 use crate::config::WindowConfig;
 use crate::icon;
+use crate::menu;
 use crate::state::SharedState;
 
 pub struct RustinoWindow {
@@ -215,6 +218,34 @@ impl RustinoWindow {
 
         let state = Arc::clone(&self.state);
 
+        // Wire menu events → EventLoopProxy
+        let menu_id_map: Arc<std::sync::Mutex<HashMap<MenuId, String>>> =
+            Arc::new(std::sync::Mutex::new(HashMap::new()));
+        {
+            let proxy = event_loop.create_proxy();
+            let map = Arc::clone(&menu_id_map);
+            muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
+                if let Ok(guard) = map.lock() {
+                    if let Some(id) = guard.get(&event.id) {
+                        let _ = proxy.send_event(RustinoCommand::MenuEventFired(id.clone()));
+                    }
+                }
+            }));
+        }
+
+        // Wire tray icon events → EventLoopProxy
+        {
+            let proxy = event_loop.create_proxy();
+            tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+                if let tray_icon::TrayIconEvent::Click { .. } = event {
+                    let _ = proxy.send_event(RustinoCommand::TrayIconClicked);
+                }
+            }));
+        }
+
+        let mut current_menu: Option<muda::Menu> = None;
+        let mut tray: Option<tray_icon::TrayIcon> = None;
+
         event_loop.run_return(move |event, _, control_flow| {
             if *control_flow != ControlFlow::Exit {
                 *control_flow = ControlFlow::Wait;
@@ -222,7 +253,16 @@ impl RustinoWindow {
 
             match event {
                 Event::UserEvent(cmd) => {
-                    if dispatch_command(cmd, &window, &webview, &state) {
+                    if dispatch_command(
+                        cmd,
+                        &window,
+                        &webview,
+                        &state,
+                        callbacks,
+                        &menu_id_map,
+                        &mut current_menu,
+                        &mut tray,
+                    ) {
                         *control_flow = ControlFlow::Exit;
                     }
                 }
@@ -275,6 +315,10 @@ impl RustinoWindow {
             }
         });
 
+        muda::MenuEvent::set_event_handler(None::<Box<dyn Fn(muda::MenuEvent) + Send + Sync>>);
+        tray_icon::TrayIconEvent::set_event_handler(
+            None::<Box<dyn Fn(tray_icon::TrayIconEvent) + Send + Sync>>,
+        );
         *self.proxy.write().unwrap() = None;
     }
 }
@@ -334,6 +378,10 @@ fn dispatch_command(
     window: &tao::window::Window,
     webview: &wry::WebView,
     state: &SharedState,
+    callbacks: RustinoCallbacks,
+    menu_id_map: &Arc<std::sync::Mutex<HashMap<MenuId, String>>>,
+    current_menu: &mut Option<muda::Menu>,
+    tray: &mut Option<tray_icon::TrayIcon>,
 ) -> bool {
     match cmd {
         RustinoCommand::SetTitle(title) => window.set_title(&title),
@@ -418,6 +466,64 @@ fn dispatch_command(
         RustinoCommand::SetBackgroundColor(r, g, b, a) => {
             let _ = webview.set_background_color((r, g, b, a));
         }
+        RustinoCommand::SetMenu(json) => {
+            if let Some(old) = current_menu.take() {
+                remove_menu_from_window(&old, window);
+            }
+            if let Some(built) = menu::build_menu(&json) {
+                attach_menu_to_window(&built.menu, window);
+                if let Ok(mut map) = menu_id_map.lock() {
+                    map.extend(built.id_map);
+                }
+                *current_menu = Some(built.menu);
+            }
+        }
+        RustinoCommand::RemoveMenu => {
+            if let Some(old) = current_menu.take() {
+                remove_menu_from_window(&old, window);
+            }
+        }
+        RustinoCommand::ShowContextMenu(json, pos) => {
+            if let Some(built) = menu::build_menu(&json) {
+                if let Ok(mut map) = menu_id_map.lock() {
+                    map.extend(built.id_map);
+                }
+                show_context_menu(&built.menu, window, pos);
+            }
+        }
+        RustinoCommand::SetTrayIcon(params) => {
+            *tray = None;
+            if let Some(ico) = load_tray_icon(&params.icon_path) {
+                let mut builder = tray_icon::TrayIconBuilder::new().with_icon(ico);
+                if let Some(ref tooltip) = params.tooltip {
+                    builder = builder.with_tooltip(tooltip);
+                }
+                if let Some(ref menu_json) = params.menu_json {
+                    if let Some(built) = menu::build_menu(menu_json) {
+                        if let Ok(mut map) = menu_id_map.lock() {
+                            map.extend(built.id_map);
+                        }
+                        builder = builder.with_menu(Box::new(built.menu));
+                    }
+                }
+                *tray = builder.build().ok();
+            }
+        }
+        RustinoCommand::RemoveTrayIcon => {
+            *tray = None;
+        }
+        RustinoCommand::MenuEventFired(id) => {
+            if let Some(cb) = callbacks.on_menu_item_clicked {
+                if let Ok(cstr) = CString::new(id.as_str()) {
+                    unsafe { cb(callbacks.context, cstr.as_ptr()) };
+                }
+            }
+        }
+        RustinoCommand::TrayIconClicked => {
+            if let Some(cb) = callbacks.on_tray_icon_clicked {
+                unsafe { cb(callbacks.context) };
+            }
+        }
         RustinoCommand::ShowOpenFileDialog(params, tx) => {
             let result = run_open_file_dialog(window, &params);
             let _ = tx.send(result);
@@ -429,6 +535,47 @@ fn dispatch_command(
         RustinoCommand::ShowSelectFolderDialog(params, tx) => {
             let result = run_select_folder_dialog(window, &params);
             let _ = tx.send(result);
+        }
+        RustinoCommand::GetMonitors(tx) => {
+            let primary = window.primary_monitor();
+            let monitors: Vec<serde_json::Value> = window
+                .available_monitors()
+                .map(|m| {
+                    let pos = m.position();
+                    let size = m.size();
+                    let is_primary = primary.as_ref().map_or(false, |p| p.name() == m.name() && p.position() == m.position());
+                    serde_json::json!({
+                        "name": m.name(),
+                        "x": pos.x,
+                        "y": pos.y,
+                        "width": size.width,
+                        "height": size.height,
+                        "scaleFactor": m.scale_factor(),
+                        "isPrimary": is_primary
+                    })
+                })
+                .collect();
+            let _ = tx.send(serde_json::to_string(&monitors).unwrap_or_default());
+        }
+        RustinoCommand::GetCurrentMonitor(tx) => {
+            let primary = window.primary_monitor();
+            let json = if let Some(m) = window.current_monitor() {
+                let pos = m.position();
+                let size = m.size();
+                let is_primary = primary.as_ref().map_or(false, |p| p.name() == m.name() && p.position() == m.position());
+                serde_json::to_string(&serde_json::json!({
+                    "name": m.name(),
+                    "x": pos.x,
+                    "y": pos.y,
+                    "width": size.width,
+                    "height": size.height,
+                    "scaleFactor": m.scale_factor(),
+                    "isPrimary": is_primary
+                })).unwrap_or_default()
+            } else {
+                String::new()
+            };
+            let _ = tx.send(json);
         }
         RustinoCommand::Close => return true,
     }
@@ -498,4 +645,70 @@ fn run_select_folder_dialog(
         d.pick_folder()
             .map(|p| vec![p.to_string_lossy().into_owned()])
     }
+}
+
+// --- Menu platform helpers ---
+
+fn attach_menu_to_window(menu: &muda::Menu, window: &tao::window::Window) {
+    #[cfg(target_os = "windows")]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        unsafe { let _ = menu.init_for_hwnd(window.hwnd() as _); }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = menu.init_for_nsapp();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use tao::platform::unix::WindowExtUnix;
+        let _ = menu.init_for_gtk_window(window.gtk_window(), None);
+    }
+}
+
+fn remove_menu_from_window(menu: &muda::Menu, window: &tao::window::Window) {
+    #[cfg(target_os = "windows")]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        unsafe { let _ = menu.remove_for_hwnd(window.hwnd() as _); }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = menu.remove_for_nsapp();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use tao::platform::unix::WindowExtUnix;
+        let _ = menu.remove_for_gtk_window(window.gtk_window());
+    }
+}
+
+fn show_context_menu(
+    menu: &muda::Menu,
+    window: &tao::window::Window,
+    pos: Option<(f64, f64)>,
+) {
+    use muda::ContextMenu;
+    let position = pos.map(|(x, y)| muda::dpi::Position::Physical(muda::dpi::PhysicalPosition::new(x as i32, y as i32)));
+    #[cfg(target_os = "windows")]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        let _ = unsafe { menu.show_context_menu_for_hwnd(window.hwnd() as _, position) };
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use tao::platform::macos::WindowExtMacOS;
+        let _ = menu.show_context_menu_for_nsview(window.ns_view() as _, position);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use tao::platform::unix::WindowExtUnix;
+        let _ = menu.show_context_menu_for_gtk_window(window.gtk_window(), position);
+    }
+}
+
+fn load_tray_icon(path: &str) -> Option<tray_icon::Icon> {
+    let img = image::open(path).ok()?.into_rgba8();
+    let (w, h) = img.dimensions();
+    tray_icon::Icon::from_rgba(img.into_raw(), w, h).ok()
 }

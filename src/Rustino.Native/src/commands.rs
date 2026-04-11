@@ -29,6 +29,18 @@ pub enum RustinoCommand {
     ShowSaveFileDialog(DialogParams, mpsc::Sender<Option<String>>),
     ShowSelectFolderDialog(DialogParams, mpsc::Sender<Option<Vec<String>>>),
 
+    SetMenu(String),
+    RemoveMenu,
+    ShowContextMenu(String, Option<(f64, f64)>),
+    SetTrayIcon(TrayParams),
+    RemoveTrayIcon,
+
+    GetMonitors(mpsc::Sender<String>),
+    GetCurrentMonitor(mpsc::Sender<String>),
+
+    MenuEventFired(String),
+    TrayIconClicked,
+
     Close,
 }
 
@@ -38,4 +50,11 @@ pub struct DialogParams {
     pub default_path: Option<String>,
     pub filters: Vec<(String, Vec<String>)>,
     pub multi_select: bool,
+}
+
+#[derive(Debug)]
+pub struct TrayParams {
+    pub icon_path: String,
+    pub tooltip: Option<String>,
+    pub menu_json: Option<String>,
 }

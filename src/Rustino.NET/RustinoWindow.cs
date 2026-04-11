@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace Rustino.NET;
 
@@ -47,6 +48,8 @@ public class RustinoWindow : IDisposable
     private readonly EventObservable<PageLoadEventArgs> _pageLoadedObs = new();
     private readonly EventObservable<NavigationEventArgs> _navigatingObs = new();
     private readonly EventObservable<EventArgs> _windowClosedObs = new();
+    private readonly EventObservable<string> _menuItemClickedObs = new();
+    private readonly EventObservable<EventArgs> _trayIconClickedObs = new();
 
     public int LogVerbosity { get; set; }
 
@@ -62,6 +65,8 @@ public class RustinoWindow : IDisposable
     private static readonly StringCallback WebMsgCb = OnWebMessageNative;
     private static readonly PageLoadCallback PageLoadCb = OnPageLoadNative;
     private static readonly NavigationCallback NavCb = OnNavigationNative;
+    private static readonly StringCallback MenuItemCb = OnMenuItemClickedNative;
+    private static readonly VoidContextCallback TrayCb = OnTrayIconClickedNative;
 
     // --- Events ---
 
@@ -73,6 +78,8 @@ public class RustinoWindow : IDisposable
     public event EventHandler<string>? WebMessageReceived;
     public event EventHandler<PageLoadEventArgs>? PageLoaded;
     public event EventHandler<NavigationEventArgs>? Navigating;
+    public event EventHandler<string>? MenuItemClicked;
+    public event EventHandler? TrayIconClicked;
 
     // --- Observable streams ---
 
@@ -83,6 +90,8 @@ public class RustinoWindow : IDisposable
     public IObservable<PageLoadEventArgs> WhenPageLoaded => _pageLoadedObs;
     public IObservable<NavigationEventArgs> WhenNavigating => _navigatingObs;
     public IObservable<EventArgs> WhenWindowClosed => _windowClosedObs;
+    public IObservable<string> WhenMenuItemClicked => _menuItemClickedObs;
+    public IObservable<EventArgs> WhenTrayIconClicked => _trayIconClickedObs;
 
     // --- Notifications (static — no window required) ---
 
@@ -416,6 +425,75 @@ public class RustinoWindow : IDisposable
         return this;
     }
 
+    // --- Monitors (post-run) ---
+
+    public MonitorInfo[] GetMonitors()
+    {
+        if (_nativeHandle == IntPtr.Zero) return [];
+        var ptr = RustinoDllImports.rustino_get_monitors(_nativeHandle);
+        var json = ConsumeStringResult(ptr);
+        if (json == null) return [];
+        return JsonSerializer.Deserialize(json, MonitorJsonContext.Default.MonitorInfoArray) ?? [];
+    }
+
+    public MonitorInfo? GetCurrentMonitor()
+    {
+        if (_nativeHandle == IntPtr.Zero) return null;
+        var ptr = RustinoDllImports.rustino_get_current_monitor(_nativeHandle);
+        var json = ConsumeStringResult(ptr);
+        if (json == null) return null;
+        return JsonSerializer.Deserialize(json, MonitorJsonContext.Default.MonitorInfo);
+    }
+
+    // --- Menus (post-run) ---
+
+    public RustinoWindow SetMenu(RustinoMenu menu)
+    {
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_menu(_nativeHandle, menu.ToJson());
+        return this;
+    }
+
+    public RustinoWindow RemoveMenu()
+    {
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_remove_menu(_nativeHandle);
+        return this;
+    }
+
+    public RustinoWindow ShowContextMenu(RustinoMenu menu, double? x = null, double? y = null)
+    {
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_show_context_menu(
+                _nativeHandle, menu.ToJson(), x ?? -1, y ?? -1);
+        return this;
+    }
+
+    // --- System Tray (post-run) ---
+
+    public RustinoWindow SetTrayIcon(string iconPath, string? tooltip = null, RustinoMenu? menu = null)
+    {
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_tray_icon(
+                _nativeHandle, iconPath, tooltip, menu?.ToJson());
+        return this;
+    }
+
+    public RustinoWindow SetTrayIcon(Stream icon, string? tooltip = null, RustinoMenu? menu = null)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"rustino_tray_{Guid.NewGuid():N}.png");
+        using (var fs = File.Create(tempPath))
+            icon.CopyTo(fs);
+        return SetTrayIcon(tempPath, tooltip, menu);
+    }
+
+    public RustinoWindow RemoveTrayIcon()
+    {
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_remove_tray_icon(_nativeHandle);
+        return this;
+    }
+
     // --- Dialogs (post-run) ---
 
     public string[]? ShowOpenFileDialog(
@@ -600,6 +678,8 @@ public class RustinoWindow : IDisposable
         RustinoDllImports.rustino_set_web_message_received_handler(_nativeHandle, WebMsgCb);
         RustinoDllImports.rustino_set_page_load_handler(_nativeHandle, PageLoadCb);
         RustinoDllImports.rustino_set_navigation_handler(_nativeHandle, NavCb);
+        RustinoDllImports.rustino_set_menu_event_handler(_nativeHandle, MenuItemCb);
+        RustinoDllImports.rustino_set_tray_icon_event_handler(_nativeHandle, TrayCb);
     }
 
     private void UnregisterCallbacks()
@@ -678,6 +758,22 @@ public class RustinoWindow : IDisposable
         return args.Cancel ? 1 : 0;
     }
 
+    private static void OnMenuItemClickedNative(IntPtr ctx, IntPtr idPtr)
+    {
+        if (!Instances.TryGetValue(ctx, out var w)) return;
+        var id = Marshal.PtrToStringUTF8(idPtr);
+        if (id == null) return;
+        w.MenuItemClicked?.Invoke(w, id);
+        w._menuItemClickedObs.Emit(id);
+    }
+
+    private static void OnTrayIconClickedNative(IntPtr ctx)
+    {
+        if (!Instances.TryGetValue(ctx, out var w)) return;
+        w.TrayIconClicked?.Invoke(w, EventArgs.Empty);
+        w._trayIconClickedObs.Emit(EventArgs.Empty);
+    }
+
     // --- Observable completion ---
 
     private static void CompleteAllObservables(RustinoWindow w)
@@ -689,6 +785,8 @@ public class RustinoWindow : IDisposable
         w._pageLoadedObs.Complete();
         w._navigatingObs.Complete();
         w._windowClosedObs.Complete();
+        w._menuItemClickedObs.Complete();
+        w._trayIconClickedObs.Complete();
     }
 
     // --- Dispose ---

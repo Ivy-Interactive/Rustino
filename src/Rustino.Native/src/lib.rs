@@ -2,6 +2,7 @@ mod callbacks;
 mod commands;
 mod config;
 mod icon;
+mod menu;
 mod state;
 mod util;
 mod window;
@@ -648,6 +649,115 @@ pub extern "C" fn rustino_show_select_folder_dialog(
 }
 
 // ---------------------------------------------------------------------------
+// Monitor enumeration (post-run only)
+// ---------------------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_get_monitors(instance: *mut RustinoWindow) -> *mut c_char {
+    catch_unwind(|| {
+        let inst = unsafe { instance.as_ref() }?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        inst.send_command(RustinoCommand::GetMonitors(tx));
+        let json = rx.recv().ok()?;
+        if json.is_empty() { return None; }
+        std::ffi::CString::new(json).ok().map(|s| s.into_raw())
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(std::ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_get_current_monitor(instance: *mut RustinoWindow) -> *mut c_char {
+    catch_unwind(|| {
+        let inst = unsafe { instance.as_ref() }?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        inst.send_command(RustinoCommand::GetCurrentMonitor(tx));
+        let json = rx.recv().ok()?;
+        if json.is_empty() { return None; }
+        std::ffi::CString::new(json).ok().map(|s| s.into_raw())
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(std::ptr::null_mut())
+}
+
+// ---------------------------------------------------------------------------
+// Menus (post-run only)
+// ---------------------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_set_menu(instance: *mut RustinoWindow, json: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_ref() } {
+            if let Some(j) = unsafe { util::cstr_to_string(json) } {
+                inst.send_command(RustinoCommand::SetMenu(j));
+            }
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_remove_menu(instance: *mut RustinoWindow) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_ref() } {
+            inst.send_command(RustinoCommand::RemoveMenu);
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_show_context_menu(
+    instance: *mut RustinoWindow,
+    json: *const c_char,
+    x: f64,
+    y: f64,
+) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_ref() } {
+            if let Some(j) = unsafe { util::cstr_to_string(json) } {
+                let pos = if x < 0.0 && y < 0.0 {
+                    None
+                } else {
+                    Some((x, y))
+                };
+                inst.send_command(RustinoCommand::ShowContextMenu(j, pos));
+            }
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_set_tray_icon(
+    instance: *mut RustinoWindow,
+    icon_path: *const c_char,
+    tooltip: *const c_char,
+    menu_json: *const c_char,
+) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_ref() } {
+            if let Some(path) = unsafe { util::cstr_to_string(icon_path) } {
+                let params = commands::TrayParams {
+                    icon_path: path,
+                    tooltip: unsafe { util::cstr_to_string(tooltip) },
+                    menu_json: unsafe { util::cstr_to_string(menu_json) },
+                };
+                inst.send_command(RustinoCommand::SetTrayIcon(params));
+            }
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_remove_tray_icon(instance: *mut RustinoWindow) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_ref() } {
+            inst.send_command(RustinoCommand::RemoveTrayIcon);
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Callback registration (pre-run only)
 // ---------------------------------------------------------------------------
 
@@ -755,6 +865,30 @@ pub extern "C" fn rustino_set_navigation_handler(
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.callbacks.on_navigation = handler;
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_set_menu_event_handler(
+    instance: *mut RustinoWindow,
+    handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
+) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.callbacks.on_menu_item_clicked = handler;
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_set_tray_icon_event_handler(
+    instance: *mut RustinoWindow,
+    handler: Option<unsafe extern "C" fn(*mut c_void)>,
+) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.callbacks.on_tray_icon_clicked = handler;
         }
     });
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Rustino.NET;
 
@@ -25,6 +26,37 @@ public class PageLoadEventArgs(bool isStarted, string url) : EventArgs
     public bool IsFinished => !IsStarted;
     public string Url { get; } = url;
 }
+
+public class MonitorInfo
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("x")]
+    public int X { get; set; }
+
+    [JsonPropertyName("y")]
+    public int Y { get; set; }
+
+    [JsonPropertyName("width")]
+    public int Width { get; set; }
+
+    [JsonPropertyName("height")]
+    public int Height { get; set; }
+
+    [JsonPropertyName("scaleFactor")]
+    public double ScaleFactor { get; set; }
+
+    [JsonPropertyName("isPrimary")]
+    public bool IsPrimary { get; set; }
+
+    public override string ToString() =>
+        $"{Name ?? "Unknown"} ({Width}x{Height} at {X},{Y}, {ScaleFactor:F2}x{(IsPrimary ? ", primary" : "")})";
+}
+
+[JsonSerializable(typeof(MonitorInfo))]
+[JsonSerializable(typeof(MonitorInfo[]))]
+internal partial class MonitorJsonContext : JsonSerializerContext;
 
 public class FileFilter(string name, params string[] extensions)
 {
