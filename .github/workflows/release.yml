@@ -29,7 +29,7 @@ jobs:
             lib: librustino_native.so
           - rid: osx-x64
             target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-14
             lib: librustino_native.dylib
           - rid: osx-arm64
             target: aarch64-apple-darwin

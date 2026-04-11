@@ -649,11 +649,11 @@ fn run_select_folder_dialog(
 
 // --- Menu platform helpers ---
 
-fn attach_menu_to_window(menu: &muda::Menu, window: &tao::window::Window) {
+fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
-        unsafe { let _ = menu.init_for_hwnd(window.hwnd() as _); }
+        unsafe { let _ = menu.init_for_hwnd(_window.hwnd() as _); }
     }
     #[cfg(target_os = "macos")]
     {
@@ -662,15 +662,15 @@ fn attach_menu_to_window(menu: &muda::Menu, window: &tao::window::Window) {
     #[cfg(target_os = "linux")]
     {
         use tao::platform::unix::WindowExtUnix;
-        let _ = menu.init_for_gtk_window(window.gtk_window(), None);
+        let _ = menu.init_for_gtk_window(_window.gtk_window(), None);
     }
 }
 
-fn remove_menu_from_window(menu: &muda::Menu, window: &tao::window::Window) {
+fn remove_menu_from_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
-        unsafe { let _ = menu.remove_for_hwnd(window.hwnd() as _); }
+        unsafe { let _ = menu.remove_for_hwnd(_window.hwnd() as _); }
     }
     #[cfg(target_os = "macos")]
     {
@@ -679,7 +679,7 @@ fn remove_menu_from_window(menu: &muda::Menu, window: &tao::window::Window) {
     #[cfg(target_os = "linux")]
     {
         use tao::platform::unix::WindowExtUnix;
-        let _ = menu.remove_for_gtk_window(window.gtk_window());
+        let _ = menu.remove_for_gtk_window(_window.gtk_window());
     }
 }
 
@@ -698,7 +698,7 @@ fn show_context_menu(
     #[cfg(target_os = "macos")]
     {
         use tao::platform::macos::WindowExtMacOS;
-        let _ = menu.show_context_menu_for_nsview(window.ns_view() as _, position);
+        let _ = unsafe { menu.show_context_menu_for_nsview(window.ns_view() as _, position) };
     }
     #[cfg(target_os = "linux")]
     {
