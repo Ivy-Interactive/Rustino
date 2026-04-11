@@ -95,6 +95,34 @@ All `.Set*()`, `.Center()`, `.Load()`, and `.WaitForClose()` calls remain the sa
 | `SetZoom(double)` | Set webview zoom factor |
 | `WaitForClose()` | Block until the window is closed |
 
+### Dialogs
+
+Native cross-platform file dialogs (powered by [rfd](https://github.com/PolyMeilex/rfd)):
+
+```csharp
+// Open file (single)
+string[]? files = window.ShowOpenFileDialog(
+    title: "Select an image",
+    filters: [new FileFilter("Images", "jpg", "png", "gif")]);
+
+// Open files (multi-select)
+string[]? files = window.ShowOpenFileDialog(
+    title: "Select files",
+    multiSelect: true);
+
+// Save file
+string? path = window.ShowSaveFileDialog(
+    title: "Save as",
+    defaultPath: "document.pdf",
+    filters: [new FileFilter("PDF", "pdf")]);
+
+// Select folder
+string[]? folders = window.ShowSelectFolderDialog(
+    title: "Choose output directory");
+```
+
+All dialogs return `null` when canceled. File filters use the format `new FileFilter("Name", "ext1", "ext2", ...)`.
+
 ### State Queries
 
 | Property | Description |

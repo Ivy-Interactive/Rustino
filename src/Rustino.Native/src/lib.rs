@@ -529,6 +529,102 @@ pub extern "C" fn rustino_set_zoom(instance: *mut RustinoWindow, factor: f64) {
 }
 
 // ---------------------------------------------------------------------------
+// Dialogs (post-run only — dispatched on event loop thread)
+// ---------------------------------------------------------------------------
+
+fn parse_filters(raw: *const c_char) -> Vec<(String, Vec<String>)> {
+    let s = match unsafe { util::cstr_to_string(raw) } {
+        Some(s) if !s.is_empty() => s,
+        _ => return Vec::new(),
+    };
+    s.split(';')
+        .filter_map(|group| {
+            let (name, exts) = group.split_once('|')?;
+            let extensions = exts.split(',').map(|e| e.trim().to_string()).collect();
+            Some((name.to_string(), extensions))
+        })
+        .collect()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_show_open_file_dialog(
+    instance: *mut RustinoWindow,
+    title: *const c_char,
+    default_path: *const c_char,
+    filters: *const c_char,
+    multi_select: i32,
+) -> *mut c_char {
+    catch_unwind(|| {
+        let inst = unsafe { instance.as_ref() }?;
+        let params = commands::DialogParams {
+            title: unsafe { util::cstr_to_string(title) },
+            default_path: unsafe { util::cstr_to_string(default_path) },
+            filters: parse_filters(filters),
+            multi_select: multi_select != 0,
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        inst.send_command(RustinoCommand::ShowOpenFileDialog(params, tx));
+        let paths = rx.recv().ok()??;
+        let joined = paths.join("\n");
+        std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(std::ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_show_save_file_dialog(
+    instance: *mut RustinoWindow,
+    title: *const c_char,
+    default_path: *const c_char,
+    filters: *const c_char,
+) -> *mut c_char {
+    catch_unwind(|| {
+        let inst = unsafe { instance.as_ref() }?;
+        let params = commands::DialogParams {
+            title: unsafe { util::cstr_to_string(title) },
+            default_path: unsafe { util::cstr_to_string(default_path) },
+            filters: parse_filters(filters),
+            multi_select: false,
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        inst.send_command(RustinoCommand::ShowSaveFileDialog(params, tx));
+        let path = rx.recv().ok()??;
+        std::ffi::CString::new(path).ok().map(|s| s.into_raw())
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(std::ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_show_select_folder_dialog(
+    instance: *mut RustinoWindow,
+    title: *const c_char,
+    default_path: *const c_char,
+    multi_select: i32,
+) -> *mut c_char {
+    catch_unwind(|| {
+        let inst = unsafe { instance.as_ref() }?;
+        let params = commands::DialogParams {
+            title: unsafe { util::cstr_to_string(title) },
+            default_path: unsafe { util::cstr_to_string(default_path) },
+            filters: Vec::new(),
+            multi_select: multi_select != 0,
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        inst.send_command(RustinoCommand::ShowSelectFolderDialog(params, tx));
+        let paths = rx.recv().ok()??;
+        let joined = paths.join("\n");
+        std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(std::ptr::null_mut())
+}
+
+// ---------------------------------------------------------------------------
 // Callback registration (pre-run only)
 // ---------------------------------------------------------------------------
 

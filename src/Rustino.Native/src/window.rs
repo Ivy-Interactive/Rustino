@@ -15,7 +15,7 @@ use wry::WebViewBuilder;
 use std::sync::Mutex as StdMutex;
 
 use crate::callbacks::RustinoCallbacks;
-use crate::commands::RustinoCommand;
+use crate::commands::{DialogParams, RustinoCommand};
 use crate::config::WindowConfig;
 use crate::icon;
 use crate::state::SharedState;
@@ -418,7 +418,84 @@ fn dispatch_command(
         RustinoCommand::SetBackgroundColor(r, g, b, a) => {
             let _ = webview.set_background_color((r, g, b, a));
         }
+        RustinoCommand::ShowOpenFileDialog(params, tx) => {
+            let result = run_open_file_dialog(window, &params);
+            let _ = tx.send(result);
+        }
+        RustinoCommand::ShowSaveFileDialog(params, tx) => {
+            let result = run_save_file_dialog(window, &params);
+            let _ = tx.send(result);
+        }
+        RustinoCommand::ShowSelectFolderDialog(params, tx) => {
+            let result = run_select_folder_dialog(window, &params);
+            let _ = tx.send(result);
+        }
         RustinoCommand::Close => return true,
     }
     false
+}
+
+fn apply_dialog_common(
+    dialog: rfd::FileDialog,
+    window: &tao::window::Window,
+    params: &DialogParams,
+) -> rfd::FileDialog {
+    let mut d = dialog.set_parent(window);
+    if let Some(ref title) = params.title {
+        d = d.set_title(title);
+    }
+    if let Some(ref path) = params.default_path {
+        let p = std::path::Path::new(path);
+        if p.is_dir() {
+            d = d.set_directory(p);
+        } else {
+            if let Some(parent) = p.parent() {
+                d = d.set_directory(parent);
+            }
+            if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                d = d.set_file_name(name);
+            }
+        }
+    }
+    for (name, exts) in &params.filters {
+        let ext_refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
+        d = d.add_filter(name, &ext_refs);
+    }
+    d
+}
+
+fn run_open_file_dialog(
+    window: &tao::window::Window,
+    params: &DialogParams,
+) -> Option<Vec<String>> {
+    let d = apply_dialog_common(rfd::FileDialog::new(), window, params);
+    if params.multi_select {
+        d.pick_files()
+            .map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+    } else {
+        d.pick_file()
+            .map(|p| vec![p.to_string_lossy().into_owned()])
+    }
+}
+
+fn run_save_file_dialog(
+    window: &tao::window::Window,
+    params: &DialogParams,
+) -> Option<String> {
+    let d = apply_dialog_common(rfd::FileDialog::new(), window, params);
+    d.save_file().map(|p| p.to_string_lossy().into_owned())
+}
+
+fn run_select_folder_dialog(
+    window: &tao::window::Window,
+    params: &DialogParams,
+) -> Option<Vec<String>> {
+    let d = apply_dialog_common(rfd::FileDialog::new(), window, params);
+    if params.multi_select {
+        d.pick_folders()
+            .map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+    } else {
+        d.pick_folder()
+            .map(|p| vec![p.to_string_lossy().into_owned()])
+    }
 }

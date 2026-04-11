@@ -1,3 +1,5 @@
+use std::sync::mpsc;
+
 #[derive(Debug)]
 pub enum RustinoCommand {
     SetTitle(String),
@@ -23,5 +25,17 @@ pub enum RustinoCommand {
     SetZoom(f64),
     SetBackgroundColor(u8, u8, u8, u8),
 
+    ShowOpenFileDialog(DialogParams, mpsc::Sender<Option<Vec<String>>>),
+    ShowSaveFileDialog(DialogParams, mpsc::Sender<Option<String>>),
+    ShowSelectFolderDialog(DialogParams, mpsc::Sender<Option<Vec<String>>>),
+
     Close,
+}
+
+#[derive(Debug)]
+pub struct DialogParams {
+    pub title: Option<String>,
+    pub default_path: Option<String>,
+    pub filters: Vec<(String, Vec<String>)>,
+    pub multi_select: bool,
 }

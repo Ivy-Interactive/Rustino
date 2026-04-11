@@ -13,3 +13,4 @@ crate-type = ["cdylib"]
 tao = "0.33"
 wry = "0.55"
 image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+rfd = "0.15"

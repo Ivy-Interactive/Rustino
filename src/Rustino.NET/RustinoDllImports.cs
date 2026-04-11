@@ -188,6 +188,30 @@ internal static class RustinoDllImports
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void rustino_set_zoom(IntPtr instance, double factor);
 
+    // --- Dialogs ---
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr rustino_show_open_file_dialog(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? title,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? defaultPath,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? filters,
+        int multiSelect);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr rustino_show_save_file_dialog(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? title,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? defaultPath,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? filters);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr rustino_show_select_folder_dialog(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? title,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? defaultPath,
+        int multiSelect);
+
     // --- Callback registration ---
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

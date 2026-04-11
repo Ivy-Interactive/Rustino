@@ -385,6 +385,60 @@ public class RustinoWindow : IDisposable
         return this;
     }
 
+    // --- Dialogs (post-run) ---
+
+    public string[]? ShowOpenFileDialog(
+        string? title = null,
+        string? defaultPath = null,
+        FileFilter[]? filters = null,
+        bool multiSelect = false)
+    {
+        if (_nativeHandle == IntPtr.Zero) return null;
+        var filterStr = FileFilter.Encode(filters);
+        var ptr = RustinoDllImports.rustino_show_open_file_dialog(
+            _nativeHandle, title, defaultPath, filterStr, multiSelect ? 1 : 0);
+        return ConsumePathResult(ptr);
+    }
+
+    public string? ShowSaveFileDialog(
+        string? title = null,
+        string? defaultPath = null,
+        FileFilter[]? filters = null)
+    {
+        if (_nativeHandle == IntPtr.Zero) return null;
+        var filterStr = FileFilter.Encode(filters);
+        var ptr = RustinoDllImports.rustino_show_save_file_dialog(
+            _nativeHandle, title, defaultPath, filterStr);
+        return ConsumeStringResult(ptr);
+    }
+
+    public string[]? ShowSelectFolderDialog(
+        string? title = null,
+        string? defaultPath = null,
+        bool multiSelect = false)
+    {
+        if (_nativeHandle == IntPtr.Zero) return null;
+        var ptr = RustinoDllImports.rustino_show_select_folder_dialog(
+            _nativeHandle, title, defaultPath, multiSelect ? 1 : 0);
+        return ConsumePathResult(ptr);
+    }
+
+    private static string? ConsumeStringResult(IntPtr ptr)
+    {
+        if (ptr == IntPtr.Zero) return null;
+        var result = Marshal.PtrToStringUTF8(ptr);
+        RustinoDllImports.rustino_free_string(ptr);
+        return result;
+    }
+
+    private static string[]? ConsumePathResult(IntPtr ptr)
+    {
+        if (ptr == IntPtr.Zero) return null;
+        var joined = Marshal.PtrToStringUTF8(ptr);
+        RustinoDllImports.rustino_free_string(ptr);
+        return joined?.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    }
+
     // --- Blocking run ---
 
     public void WaitForClose()
