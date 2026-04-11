@@ -466,6 +466,9 @@ fn dispatch_command(
         RustinoCommand::SetBackgroundColor(r, g, b, a) => {
             let _ = webview.set_background_color((r, g, b, a));
         }
+        RustinoCommand::SetBadgeCount(count) => {
+            set_badge_count(window, count);
+        }
         RustinoCommand::SetMenu(json) => {
             if let Some(old) = current_menu.take() {
                 remove_menu_from_window(&old, window);
@@ -705,6 +708,209 @@ fn show_context_menu(
         use tao::platform::unix::WindowExtUnix;
         use gtk::prelude::Cast;
         let _ = menu.show_context_menu_for_gtk_window(window.gtk_window().upcast_ref::<gtk::Window>(), position);
+    }
+}
+
+// --- Taskbar badge ---
+
+fn set_badge_count(_window: &tao::window::Window, count: Option<u32>) {
+    #[cfg(target_os = "windows")]
+    {
+        set_badge_count_windows(_window, count);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        set_badge_count_macos(count);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>) {
+    use tao::platform::windows::WindowExtWindows;
+    use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList};
+    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    use windows::Win32::Foundation::HWND;
+
+    unsafe {
+        let Ok(taskbar): Result<ITaskbarList3, _> =
+            CoCreateInstance(&TaskbarList, None, CLSCTX_ALL)
+        else {
+            return;
+        };
+
+        let hwnd = HWND(window.hwnd() as *mut std::ffi::c_void);
+
+        match count {
+            None | Some(0) => {
+                let _ = taskbar.SetOverlayIcon(hwnd, HICON::default(), None);
+            }
+            Some(n) => {
+                if let Some(icon) = create_badge_icon(n) {
+                    let _ = taskbar.SetOverlayIcon(hwnd, icon, None);
+                    let _ = DestroyIcon(icon);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn create_badge_icon(count: u32) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    use windows::Win32::Graphics::Gdi::*;
+
+    let size: i32 = 16;
+    let pixels = size * size;
+    let mut rgba = vec![0u8; (pixels * 4) as usize];
+
+    let cx = size as f32 / 2.0;
+    let cy = size as f32 / 2.0;
+    let r = cx - 0.5;
+
+    for y in 0..size {
+        for x in 0..size {
+            let dx = x as f32 + 0.5 - cx;
+            let dy = y as f32 + 0.5 - cy;
+            let dist = (dx * dx + dy * dy).sqrt();
+            if dist <= r {
+                let alpha = ((r - dist).min(1.0) * 255.0) as u8;
+                let idx = ((y * size + x) * 4) as usize;
+                rgba[idx] = 0x33;     // B
+                rgba[idx + 1] = 0x33; // G
+                rgba[idx + 2] = 0xEE; // R (red)
+                rgba[idx + 3] = alpha; // A
+            }
+        }
+    }
+
+    let text = if count > 99 { "!".to_string() } else { count.to_string() };
+    let glyphs = render_badge_text(&text);
+    let gw = glyphs.first().map_or(0, |row| row.len()) as i32;
+    let gh = glyphs.len() as i32;
+    let ox = (size - gw) / 2;
+    let oy = (size - gh) / 2;
+
+    for (gy, row) in glyphs.iter().enumerate() {
+        for (gx, &pixel) in row.iter().enumerate() {
+            if pixel {
+                let px = ox + gx as i32;
+                let py = oy + gy as i32;
+                if px >= 0 && px < size && py >= 0 && py < size {
+                    let idx = ((py * size + px) * 4) as usize;
+                    if rgba[idx + 3] > 0 {
+                        rgba[idx] = 0xFF;
+                        rgba[idx + 1] = 0xFF;
+                        rgba[idx + 2] = 0xFF;
+                    }
+                }
+            }
+        }
+    }
+
+    unsafe {
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = size;
+        bmi.bmiHeader.biHeight = -(size);
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+
+        let hdc = CreateCompatibleDC(None);
+        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
+
+        std::ptr::copy_nonoverlapping(rgba.as_ptr(), bits as *mut u8, rgba.len());
+
+        let mask = CreateBitmap(size, size, 1, 1, None);
+        let ii = ICONINFO {
+            fIcon: true.into(),
+            xHotspot: 0,
+            yHotspot: 0,
+            hbmMask: mask,
+            hbmColor: bmp,
+        };
+        let icon = CreateIconIndirect(&ii).ok();
+
+        let _ = DeleteObject(bmp.into());
+        let _ = DeleteObject(mask.into());
+        let _ = DeleteDC(hdc);
+
+        icon
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn render_badge_text(text: &str) -> Vec<Vec<bool>> {
+    const FONT: [([u8; 5], u8); 11] = [
+        ([0b111, 0b101, 0b101, 0b101, 0b111], 3), // 0
+        ([0b010, 0b110, 0b010, 0b010, 0b111], 3), // 1
+        ([0b111, 0b001, 0b111, 0b100, 0b111], 3), // 2
+        ([0b111, 0b001, 0b111, 0b001, 0b111], 3), // 3
+        ([0b101, 0b101, 0b111, 0b001, 0b001], 3), // 4
+        ([0b111, 0b100, 0b111, 0b001, 0b111], 3), // 5
+        ([0b111, 0b100, 0b111, 0b101, 0b111], 3), // 6
+        ([0b111, 0b001, 0b010, 0b010, 0b010], 3), // 7
+        ([0b111, 0b101, 0b111, 0b101, 0b111], 3), // 8
+        ([0b111, 0b101, 0b111, 0b001, 0b111], 3), // 9
+        ([0b010, 0b101, 0b010, 0b000, 0b010], 3), // ! (for 100+)
+    ];
+
+    let chars: Vec<usize> = text
+        .chars()
+        .filter_map(|c| match c {
+            '0'..='9' => Some((c as u8 - b'0') as usize),
+            '!' => Some(10),
+            _ => None,
+        })
+        .collect();
+
+    if chars.is_empty() {
+        return vec![];
+    }
+
+    let total_width: usize = chars.iter().map(|&i| FONT[i].1 as usize).sum::<usize>()
+        + chars.len().saturating_sub(1);
+
+    let mut rows = vec![vec![false; total_width]; 5];
+    let mut x_offset = 0usize;
+
+    for (ci, &idx) in chars.iter().enumerate() {
+        let (glyph_rows, w) = FONT[idx];
+        let w = w as usize;
+        for (row, &bits) in glyph_rows.iter().enumerate() {
+            for col in 0..w {
+                let bit = (bits >> (w - 1 - col)) & 1;
+                if bit == 1 {
+                    rows[row][x_offset + col] = true;
+                }
+            }
+        }
+        x_offset += w;
+        if ci < chars.len() - 1 {
+            x_offset += 1; // 1px spacing between characters
+        }
+    }
+
+    rows
+}
+
+#[cfg(target_os = "macos")]
+fn set_badge_count_macos(count: Option<u32>) {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::NSString;
+
+    unsafe {
+        let app = NSApplication::sharedApplication();
+        let dock_tile = app.dockTile();
+        match count {
+            None | Some(0) => {
+                dock_tile.setBadgeLabel(Some(&NSString::from_str("")));
+            }
+            Some(n) => {
+                dock_tile.setBadgeLabel(Some(&NSString::from_str(&n.to_string())));
+            }
+        }
     }
 }
 

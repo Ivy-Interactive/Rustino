@@ -649,6 +649,20 @@ pub extern "C" fn rustino_show_select_folder_dialog(
 }
 
 // ---------------------------------------------------------------------------
+// Taskbar badge (post-run only)
+// ---------------------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_set_badge_count(instance: *mut RustinoWindow, count: i32) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_ref() } {
+            let badge = if count > 0 { Some(count as u32) } else { None };
+            inst.send_command(RustinoCommand::SetBadgeCount(badge));
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Monitor enumeration (post-run only)
 // ---------------------------------------------------------------------------
 

@@ -487,6 +487,20 @@ public class RustinoWindow : IDisposable
         return SetTrayIcon(tempPath, tooltip, menu);
     }
 
+    // --- Badge ---
+
+    public RustinoWindow SetBadgeCount(int? count)
+    {
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_badge_count(_nativeHandle, count ?? 0);
+        return this;
+    }
+
+    public RustinoWindow ClearBadge()
+    {
+        return SetBadgeCount(null);
+    }
+
     public RustinoWindow RemoveTrayIcon()
     {
         if (_nativeHandle != IntPtr.Zero)

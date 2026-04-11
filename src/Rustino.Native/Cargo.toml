@@ -20,5 +20,18 @@ tray-icon = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_UI_Shell",
+    "Win32_System_Com",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+]}
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSDockTile"] }
+objc2-foundation = { version = "0.3", features = ["NSString"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

@@ -228,6 +228,11 @@ internal static class RustinoDllImports
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr rustino_get_current_monitor(IntPtr instance);
 
+    // --- Badge ---
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_badge_count(IntPtr instance, int count);
+
     // --- Menus & Tray ---
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

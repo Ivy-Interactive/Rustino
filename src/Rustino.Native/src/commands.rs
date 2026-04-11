@@ -35,6 +35,8 @@ pub enum RustinoCommand {
     SetTrayIcon(TrayParams),
     RemoveTrayIcon,
 
+    SetBadgeCount(Option<u32>),
+
     GetMonitors(mpsc::Sender<String>),
     GetCurrentMonitor(mpsc::Sender<String>),
 
