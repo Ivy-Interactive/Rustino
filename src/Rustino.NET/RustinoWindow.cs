@@ -189,6 +189,14 @@ public class RustinoWindow : IDisposable
         return this;
     }
 
+    public RustinoWindow SetIcon(Stream icon)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"rustino_icon_{Guid.NewGuid():N}.png");
+        using (var fs = File.Create(tempPath))
+            icon.CopyTo(fs);
+        return SetIconFile(tempPath);
+    }
+
     public RustinoWindow Center()
     {
         _center = true;
