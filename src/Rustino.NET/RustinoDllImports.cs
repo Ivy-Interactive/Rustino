@@ -48,6 +48,14 @@ internal static class RustinoDllImports
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void rustino_free_string(IntPtr s);
 
+    // --- Notifications ---
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int rustino_show_notification(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string title,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string body,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? icon);
+
     // --- Dual-mode setters ---
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

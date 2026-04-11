@@ -123,6 +123,20 @@ string[]? folders = window.ShowSelectFolderDialog(
 
 All dialogs return `null` when canceled. File filters use the format `new FileFilter("Name", "ext1", "ext2", ...)`.
 
+### Notifications
+
+Native cross-platform toast notifications (powered by [notify-rust](https://github.com/hoodie/notify-rust)):
+
+```csharp
+// Static — no window instance required
+RustinoWindow.ShowNotification("Download Complete", "Your file has been saved.");
+
+// With icon
+RustinoWindow.ShowNotification("Alert", "Something happened", iconPath: "/path/to/icon.png");
+```
+
+Uses WinRT Toast (Windows), NSUserNotification (macOS), and D-Bus (Linux).
+
 ### State Queries
 
 | Property | Description |

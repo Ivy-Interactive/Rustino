@@ -84,6 +84,14 @@ public class RustinoWindow : IDisposable
     public IObservable<NavigationEventArgs> WhenNavigating => _navigatingObs;
     public IObservable<EventArgs> WhenWindowClosed => _windowClosedObs;
 
+    // --- Notifications (static — no window required) ---
+
+    public static bool ShowNotification(string title, string body, string? iconPath = null)
+    {
+        NativeLibraryResolver.EnsureRegistered();
+        return RustinoDllImports.rustino_show_notification(title, body, iconPath) != 0;
+    }
+
     // --- Constructor ---
 
     public RustinoWindow()

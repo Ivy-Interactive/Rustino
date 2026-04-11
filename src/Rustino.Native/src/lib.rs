@@ -69,6 +69,29 @@ pub extern "C" fn rustino_free_string(s: *mut c_char) {
 }
 
 // ---------------------------------------------------------------------------
+// Notifications (standalone — no instance required)
+// ---------------------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_show_notification(
+    title: *const c_char,
+    body: *const c_char,
+    icon: *const c_char,
+) -> i32 {
+    catch_unwind(|| {
+        let title = unsafe { util::cstr_to_string(title) }.unwrap_or_default();
+        let body = unsafe { util::cstr_to_string(body) }.unwrap_or_default();
+        let mut n = notify_rust::Notification::new();
+        n.summary(&title).body(&body);
+        if let Some(icon_path) = unsafe { util::cstr_to_string(icon) } {
+            n.icon(&icon_path);
+        }
+        if n.show().is_ok() { 1 } else { 0 }
+    })
+    .unwrap_or(0)
+}
+
+// ---------------------------------------------------------------------------
 // Dual-mode setters (pre-run: modify config, post-run: send command)
 // ---------------------------------------------------------------------------
 
