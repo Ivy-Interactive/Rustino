@@ -662,7 +662,7 @@ fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "linux")]
     {
         use tao::platform::unix::WindowExtUnix;
-        let _ = menu.init_for_gtk_window(_window.gtk_window(), None);
+        let _ = menu.init_for_gtk_window(_window.gtk_window(), None::<&gtk::Container>);
     }
 }
 
@@ -703,7 +703,8 @@ fn show_context_menu(
     #[cfg(target_os = "linux")]
     {
         use tao::platform::unix::WindowExtUnix;
-        let _ = menu.show_context_menu_for_gtk_window(window.gtk_window(), position);
+        use gtk::prelude::Cast;
+        let _ = menu.show_context_menu_for_gtk_window(window.gtk_window().upcast_ref::<gtk::Window>(), position);
     }
 }
 
