@@ -897,19 +897,19 @@ fn render_badge_text(text: &str) -> Vec<Vec<bool>> {
 
 #[cfg(target_os = "macos")]
 fn set_badge_count_macos(count: Option<u32>) {
+    use objc2::MainThreadMarker;
     use objc2_app_kit::NSApplication;
     use objc2_foundation::NSString;
 
-    unsafe {
-        let app = NSApplication::sharedApplication();
-        let dock_tile = app.dockTile();
-        match count {
-            None | Some(0) => {
-                dock_tile.setBadgeLabel(Some(&NSString::from_str("")));
-            }
-            Some(n) => {
-                dock_tile.setBadgeLabel(Some(&NSString::from_str(&n.to_string())));
-            }
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let app = NSApplication::sharedApplication(mtm);
+    let dock_tile = app.dockTile();
+    match count {
+        None | Some(0) => {
+            dock_tile.setBadgeLabel(Some(&NSString::from_str("")));
+        }
+        Some(n) => {
+            dock_tile.setBadgeLabel(Some(&NSString::from_str(&n.to_string())));
         }
     }
 }
