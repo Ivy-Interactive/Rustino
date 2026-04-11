@@ -92,6 +92,21 @@ public class RustinoWindow : IDisposable
         return RustinoDllImports.rustino_show_notification(title, body, iconPath) != 0;
     }
 
+    public static bool ShowNotification(string title, string body, Stream icon)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"rustino_notify_{Guid.NewGuid():N}.png");
+        try
+        {
+            using (var fs = File.Create(tempPath))
+                icon.CopyTo(fs);
+            return ShowNotification(title, body, tempPath);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
+    }
+
     // --- Constructor ---
 
     public RustinoWindow()
