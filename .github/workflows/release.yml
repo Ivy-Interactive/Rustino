@@ -109,7 +109,10 @@ jobs:
           totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
           malware_block: true
           dir_path: src/Rustino.NET/runtimes/win-x64/native
-          output_path: src/Rustino.NET/runtimes/win-x64/native
+          output_path: src/signed-win-x64
+
+      - name: Replace with signed Windows x64 binaries
+        run: cp -f ../signed-win-x64/*.dll Rustino.NET/runtimes/win-x64/native/
 
       - name: Sign Windows ARM64 native binaries
         uses: sslcom/esigner-codesign@develop
@@ -121,7 +124,10 @@ jobs:
           totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
           malware_block: true
           dir_path: src/Rustino.NET/runtimes/win-arm64/native
-          output_path: src/Rustino.NET/runtimes/win-arm64/native
+          output_path: src/signed-win-arm64
+
+      - name: Replace with signed Windows ARM64 binaries
+        run: cp -f ../signed-win-arm64/*.dll Rustino.NET/runtimes/win-arm64/native/
 
       - name: Determine version
         id: version
