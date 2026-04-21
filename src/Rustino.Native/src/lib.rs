@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod icon;
 mod menu;
+mod splash;
 mod state;
 mod util;
 mod window;
@@ -905,4 +906,50 @@ pub extern "C" fn rustino_set_tray_icon_event_handler(
             inst.callbacks.on_tray_icon_clicked = handler;
         }
     });
+}
+
+// ---------------------------------------------------------------------------
+// Splashscreen (standalone — no event loop required)
+// ---------------------------------------------------------------------------
+
+/// # Safety
+/// `image_path` must be a valid null-terminated C string pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_splash_create(
+    image_path: *const c_char,
+    width: i32,
+    height: i32,
+) -> *mut splash::SplashWindow {
+    let path = match unsafe { util::cstr_to_string(image_path) } {
+        Some(p) => p,
+        None => return std::ptr::null_mut(),
+    };
+    let w = width.max(1) as u32;
+    let h = height.max(1) as u32;
+
+    match splash::SplashWindow::new(&path, w, h) {
+        Ok(splash) => Box::into_raw(Box::new(splash)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// # Safety
+/// `splash` must be a valid pointer returned from `rustino_splash_create`, or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_splash_close(splash: *mut splash::SplashWindow) {
+    if let Some(s) = unsafe { splash.as_ref() } {
+        s.close();
+    }
+}
+
+/// # Safety
+/// `splash` must be a valid pointer returned from `rustino_splash_create`, or null.
+/// After calling this, the pointer is invalid and must not be used again.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_splash_dtor(splash: *mut splash::SplashWindow) {
+    if !splash.is_null() {
+        unsafe {
+            drop(Box::from_raw(splash));
+        }
+    }
 }
