@@ -344,6 +344,7 @@ fn configure_webview2_args(config: &WindowConfig) {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn log_warning(config: &WindowConfig, message: &str) {
     if let Some(callback) = config.log_callback {
         let c_message = std::ffi::CString::new(message).unwrap_or_default();
