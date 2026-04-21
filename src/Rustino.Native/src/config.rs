@@ -1,4 +1,6 @@
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
+
+pub type LogCallback = unsafe extern "C" fn(context: *const c_void, level: i32, message: *const c_char);
 
 #[repr(C)]
 pub struct RustinoInitParams {
@@ -15,6 +17,8 @@ pub struct RustinoInitParams {
     pub ignore_certificate_errors: i32,
     pub web_security_enabled: i32,
     pub log_verbosity: i32,
+    pub log_callback: Option<LogCallback>,
+    pub log_context: *const c_void,
 }
 
 pub struct WindowConfig {
@@ -33,6 +37,8 @@ pub struct WindowConfig {
     pub start_url: Option<String>,
     pub start_html: Option<String>,
     pub log_verbosity: i32,
+    pub log_callback: Option<LogCallback>,
+    pub log_context: *const c_void,
 
     pub transparent: bool,
     pub decorations: bool,
@@ -68,6 +74,8 @@ impl Default for WindowConfig {
             start_url: None,
             start_html: None,
             log_verbosity: 0,
+            log_callback: None,
+            log_context: std::ptr::null(),
             transparent: false,
             decorations: true,
             visible: true,
@@ -107,6 +115,8 @@ impl WindowConfig {
             start_url: None,
             start_html: None,
             log_verbosity: params.log_verbosity,
+            log_callback: params.log_callback,
+            log_context: params.log_context,
             ..Default::default()
         }
     }
@@ -142,6 +152,8 @@ mod tests {
             ignore_certificate_errors: 0,
             web_security_enabled: 1,
             log_verbosity: 2,
+            log_callback: None,
+            log_context: std::ptr::null(),
         };
         (params, keep)
     }
