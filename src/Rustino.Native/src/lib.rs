@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod icon;
 mod menu;
+mod splash;
 mod state;
 mod util;
 mod window;
@@ -905,4 +906,43 @@ pub extern "C" fn rustino_set_tray_icon_event_handler(
             inst.callbacks.on_tray_icon_clicked = handler;
         }
     });
+}
+
+// ---------------------------------------------------------------------------
+// Splashscreen (standalone — no event loop required)
+// ---------------------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_splash_create(
+    image_path: *const c_char,
+    width: i32,
+    height: i32,
+) -> *mut splash::SplashWindow {
+    let path = match unsafe { util::cstr_to_string(image_path) } {
+        Some(p) => p,
+        None => return std::ptr::null_mut(),
+    };
+    let w = width.max(1) as u32;
+    let h = height.max(1) as u32;
+
+    match splash::SplashWindow::new(&path, w, h) {
+        Ok(splash) => Box::into_raw(Box::new(splash)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_splash_close(splash: *mut splash::SplashWindow) {
+    if let Some(s) = unsafe { splash.as_ref() } {
+        s.close();
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustino_splash_dtor(splash: *mut splash::SplashWindow) {
+    if !splash.is_null() {
+        unsafe {
+            drop(Box::from_raw(splash));
+        }
+    }
 }
