@@ -336,11 +336,23 @@ fn configure_webview2_args(config: &WindowConfig) {
     #[cfg(not(target_os = "windows"))]
     {
         if !config.web_security_enabled {
-            eprintln!("[rustino] Warning: SetWebSecurityEnabled(false) is only supported on Windows (WebView2). Ignored on this platform.");
+            log_warning(config, "[rustino] Warning: SetWebSecurityEnabled(false) is only supported on Windows (WebView2). Ignored on this platform.");
         }
         if config.ignore_certificate_errors {
-            eprintln!("[rustino] Warning: SetIgnoreCertificateErrorsEnabled(true) is only supported on Windows (WebView2). Ignored on this platform.");
+            log_warning(config, "[rustino] Warning: SetIgnoreCertificateErrorsEnabled(true) is only supported on Windows (WebView2). Ignored on this platform.");
         }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn log_warning(config: &WindowConfig, message: &str) {
+    if let Some(callback) = config.log_callback {
+        let c_message = std::ffi::CString::new(message).unwrap_or_default();
+        unsafe {
+            callback(config.log_context, 3, c_message.as_ptr());
+        }
+    } else if config.log_verbosity > 0 {
+        eprintln!("{}", message);
     }
 }
 

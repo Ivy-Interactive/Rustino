@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Rustino.NET;
 
@@ -9,6 +10,9 @@ public class RustinoWindow : IDisposable
 {
     private IntPtr _nativeHandle;
     private int _disposed;
+    private ILogger? _logger;
+    private LogCallback? _logCallbackDelegate;
+    private GCHandle _logCallbackHandle;
 
     // Original configuration fields
     private string _title = "Rustino Window";
@@ -68,6 +72,10 @@ public class RustinoWindow : IDisposable
     private static readonly StringCallback MenuItemCb = OnMenuItemClickedNative;
     private static readonly VoidContextCallback TrayCb = OnTrayIconClickedNative;
 
+    // --- Logging delegate ---
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void LogCallback(IntPtr context, int level, IntPtr message);
+
     // --- Events ---
 
     public event EventHandler<CancelEventArgs>? WindowClosing;
@@ -121,6 +129,14 @@ public class RustinoWindow : IDisposable
     public RustinoWindow()
     {
         NativeLibraryResolver.EnsureRegistered();
+    }
+
+    // --- Logger configuration ---
+
+    public RustinoWindow SetLogger(ILogger logger)
+    {
+        _logger = logger;
+        return this;
     }
 
     // --- Original builder methods ---
@@ -608,6 +624,18 @@ public class RustinoWindow : IDisposable
         var titlePtr = Marshal.StringToCoTaskMemUTF8(_title);
         var iconPtr = _iconFile != null ? Marshal.StringToCoTaskMemUTF8(_iconFile) : IntPtr.Zero;
 
+        // Setup logging callback if ILogger is provided
+        IntPtr logCallbackPtr = IntPtr.Zero;
+        IntPtr logContextPtr = IntPtr.Zero;
+
+        if (_logger != null)
+        {
+            _logCallbackDelegate = OnLogMessageNative;
+            _logCallbackHandle = GCHandle.Alloc(this);
+            logCallbackPtr = Marshal.GetFunctionPointerForDelegate(_logCallbackDelegate);
+            logContextPtr = GCHandle.ToIntPtr(_logCallbackHandle);
+        }
+
         try
         {
             var parameters = new RustinoNativeParameters
@@ -625,6 +653,8 @@ public class RustinoWindow : IDisposable
                 IgnoreCertificateErrors = _ignoreCertErrors ? 1 : 0,
                 WebSecurityEnabled = _webSecurityEnabled ? 1 : 0,
                 LogVerbosity = LogVerbosity,
+                LogCallback = logCallbackPtr,
+                LogContext = logContextPtr,
             };
 
             _nativeHandle = RustinoDllImports.rustino_ctor(ref parameters);
@@ -788,6 +818,29 @@ public class RustinoWindow : IDisposable
         w._trayIconClickedObs.Emit(EventArgs.Empty);
     }
 
+    private static void OnLogMessageNative(IntPtr ctx, int level, IntPtr messagePtr)
+    {
+        if (ctx == IntPtr.Zero) return;
+        var handle = GCHandle.FromIntPtr(ctx);
+        if (handle.Target is not RustinoWindow w || w._logger == null) return;
+
+        var message = Marshal.PtrToStringUTF8(messagePtr);
+        if (string.IsNullOrEmpty(message)) return;
+
+        var logLevel = level switch
+        {
+            0 => LogLevel.Trace,
+            1 => LogLevel.Debug,
+            2 => LogLevel.Information,
+            3 => LogLevel.Warning,
+            4 => LogLevel.Error,
+            5 => LogLevel.Critical,
+            _ => LogLevel.Information
+        };
+
+        w._logger.Log(logLevel, message);
+    }
+
     // --- Observable completion ---
 
     private static void CompleteAllObservables(RustinoWindow w)
@@ -817,6 +870,11 @@ public class RustinoWindow : IDisposable
             Instances.TryRemove(_nativeHandle, out _);
             RustinoDllImports.rustino_dtor(_nativeHandle);
             _nativeHandle = IntPtr.Zero;
+        }
+
+        if (_logCallbackHandle.IsAllocated)
+        {
+            _logCallbackHandle.Free();
         }
 
         GC.SuppressFinalize(this);
