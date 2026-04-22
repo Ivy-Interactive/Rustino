@@ -103,20 +103,20 @@ public class RustinoWindow : IDisposable
 
     // --- Notifications (static — no window required) ---
 
-    public static bool ShowNotification(string title, string body, string? iconPath = null)
+    public static bool ShowNotification(string title, string body, string? iconPath = null, string? appId = null)
     {
         NativeLibraryResolver.EnsureRegistered();
-        return RustinoDllImports.rustino_show_notification(title, body, iconPath) != 0;
+        return RustinoDllImports.rustino_show_notification(title, body, iconPath, appId) != 0;
     }
 
-    public static bool ShowNotification(string title, string body, Stream icon)
+    public static bool ShowNotification(string title, string body, Stream icon, string? appId = null)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"rustino_notify_{Guid.NewGuid():N}.png");
         try
         {
             using (var fs = File.Create(tempPath))
                 icon.CopyTo(fs);
-            return ShowNotification(title, body, tempPath);
+            return ShowNotification(title, body, tempPath, appId);
         }
         finally
         {

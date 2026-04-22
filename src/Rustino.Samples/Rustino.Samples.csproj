@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="splash.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Rustino.NET/Rustino.NET.csproj" />
     <ProjectReference Include="../Rustino.NET.Reactive/Rustino.NET.Reactive.csproj" />
   </ItemGroup>

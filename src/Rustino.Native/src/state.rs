@@ -1,4 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 
 pub struct SharedState {
     pub is_minimized: AtomicBool,
@@ -8,6 +9,8 @@ pub struct SharedState {
     pub is_focused: AtomicBool,
     position: AtomicU64,
     size: AtomicU64,
+    monitors_json: Mutex<String>,
+    current_monitor_json: Mutex<String>,
 }
 
 impl SharedState {
@@ -20,6 +23,8 @@ impl SharedState {
             is_focused: AtomicBool::new(true),
             position: AtomicU64::new(0),
             size: AtomicU64::new(pack_u32(width, height)),
+            monitors_json: Mutex::new(String::new()),
+            current_monitor_json: Mutex::new(String::new()),
         }
     }
 
@@ -37,6 +42,25 @@ impl SharedState {
 
     pub fn load_size(&self) -> (u32, u32) {
         unpack_u32(self.size.load(Ordering::Acquire))
+    }
+
+    pub fn store_monitors(&self, monitors: &str, current: &str) {
+        if let Ok(mut m) = self.monitors_json.lock() {
+            m.clear();
+            m.push_str(monitors);
+        }
+        if let Ok(mut c) = self.current_monitor_json.lock() {
+            c.clear();
+            c.push_str(current);
+        }
+    }
+
+    pub fn load_monitors(&self) -> String {
+        self.monitors_json.lock().map(|m| m.clone()).unwrap_or_default()
+    }
+
+    pub fn load_current_monitor(&self) -> String {
+        self.current_monitor_json.lock().map(|m| m.clone()).unwrap_or_default()
     }
 }
 

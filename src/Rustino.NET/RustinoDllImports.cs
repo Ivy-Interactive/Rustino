@@ -54,7 +54,8 @@ internal static class RustinoDllImports
     internal static extern int rustino_show_notification(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string title,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string body,
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string? icon);
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? icon,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? appId);
 
     // --- Dual-mode setters ---
 

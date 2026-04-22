@@ -8,6 +8,15 @@ using Rustino.NET.Reactive;
 // --- Logging ---
 using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning));
 var logger = loggerFactory.CreateLogger("Rustino");
+var iconPath = Path.Combine(AppContext.BaseDirectory, "icon.png");
+var menuInitialized = false;
+
+// --- Splashscreen ---
+var splashPath = Path.Combine(AppContext.BaseDirectory, "splash.png");
+using (var splash = new RustinoSplashscreen(splashPath, 400, 400))
+{
+    Thread.Sleep(3000);
+}
 
 var window = new RustinoWindow();
 
@@ -58,7 +67,19 @@ window.WindowClosed += (_, _) => Console.WriteLine("[Event] WindowClosed");
 window.SizeChanged += (_, a) => { if (a is SizeEventArgs s) Console.WriteLine($"[Event] SizeChanged: {s.Width}x{s.Height}"); };
 window.LocationChanged += (_, a) => { if (a is PointEventArgs p) Console.WriteLine($"[Event] LocationChanged: ({p.X}, {p.Y})"); };
 window.FocusChanged += (_, f) => { if (f is bool b) Console.WriteLine($"[Event] FocusChanged: {b}"); };
-window.PageLoaded += (_, a) => { if (a is PageLoadEventArgs pl) Console.WriteLine($"[Event] PageLoad: {(pl.IsStarted ? "Started" : "Finished")} - {pl.Url}"); };
+window.PageLoaded += (_, a) =>
+{
+    if (a is PageLoadEventArgs pl)
+    {
+        Console.WriteLine($"[Event] PageLoad: {(pl.IsStarted ? "Started" : "Finished")} - {pl.Url}");
+        if (pl.IsFinished && !menuInitialized)
+        {
+            menuInitialized = true;
+            window.SetMenu(appMenu);
+            window.SetTrayIcon(iconPath, tooltip: "Rustino Feature Showcase", menu: trayMenu);
+        }
+    }
+};
 
 // --- Reactive observables (logged to console) ---
 window.WhenSizeChangedThrottled(TimeSpan.FromMilliseconds(300))
@@ -178,15 +199,15 @@ void HandleMessage(string msg)
 
         // Notifications
         case "notify-basic":
-            RustinoWindow.ShowNotification("Hello from Rustino!", "This is a basic notification.");
+            RustinoWindow.ShowNotification("Hello from Rustino!", "This is a basic notification.", appId: "Rustino");
             Log("Notification sent");
             break;
         case "notify-detailed":
-            RustinoWindow.ShowNotification("Download Complete", "report-2026.pdf saved to Downloads.");
+            RustinoWindow.ShowNotification("Download Complete", "report-2026.pdf saved to Downloads.", appId: "Rustino");
             Log("Notification sent");
             break;
         case "notify-alert":
-            RustinoWindow.ShowNotification("Build Failed", "3 errors found in Program.cs.");
+            RustinoWindow.ShowNotification("Build Failed", "3 errors found in Program.cs.", appId: "Rustino");
             Log("Notification sent");
             break;
 
@@ -199,7 +220,8 @@ void HandleMessage(string msg)
         case "get-monitors":
             var monitors = window.GetMonitors();
             var current = window.GetCurrentMonitor();
-            var data = JsonSerializer.Serialize(new { monitors, currentName = current?.Name });
+            var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            var data = JsonSerializer.Serialize(new { monitors, currentName = current?.Name }, jsonOpts);
             window.ExecuteScript($"updateMonitors({data})");
             break;
 
@@ -244,6 +266,7 @@ void Log(string text)
 window
     .SetLogger(logger)
     .SetTitle("Rustino — Feature Showcase")
+    .SetIconFile(iconPath)
     .SetUseOsDefaultSize(false)
     .SetSize(1100, 800)
     .SetMinSize(600, 400)
@@ -266,8 +289,6 @@ window
         });
     """)
     .Load("data:text/html," + Uri.EscapeDataString(Html()));
-
-window.SetMenu(appMenu);
 
 window.WaitForClose();
 
@@ -461,7 +482,7 @@ static string Html() => """
         </div>
         <div class="card">
           <h3>System Tray</h3>
-          <p style="color:#888;font-size:0.82rem">A tray icon is registered via SetTrayIcon() with a tooltip and menu. Click the tray icon to show the window. (Requires a tray.png icon file.)</p>
+          <p style="color:#888;font-size:0.82rem">A tray icon is registered via SetTrayIcon() with a tooltip and menu. Click the tray icon to show the window.</p>
         </div>
       </div>
 

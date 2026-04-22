@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 tao = "0.33"
 wry = "0.55"
-image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+image = { version = "0.25", default-features = false, features = ["ico", "png", "jpeg"] }
 rfd = "0.15"
 notify-rust = "4"
 muda = "0.17"
