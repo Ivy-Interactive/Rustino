@@ -17,7 +17,7 @@ use wry::WebViewBuilder;
 use std::sync::Mutex as StdMutex;
 
 use crate::callbacks::RustinoCallbacks;
-use crate::commands::{DialogParams, RustinoCommand};
+use crate::commands::RustinoCommand;
 use crate::config::WindowConfig;
 use crate::icon;
 use crate::menu;
@@ -216,6 +216,8 @@ impl RustinoWindow {
             .is_visible
             .store(config.visible, Ordering::Release);
 
+        update_monitor_cache(&window, &self.state);
+
         let state = Arc::clone(&self.state);
 
         // Wire menu events → EventLoopProxy
@@ -291,6 +293,7 @@ impl RustinoWindow {
                         }
                         WindowEvent::Moved(pos) => {
                             state.store_position(pos.x, pos.y);
+                            update_monitor_cache(&window, &state);
                             if let Some(cb) = callbacks.on_moved {
                                 unsafe { cb(callbacks.context, pos.x, pos.y) };
                             }
@@ -336,11 +339,23 @@ fn configure_webview2_args(config: &WindowConfig) {
     #[cfg(not(target_os = "windows"))]
     {
         if !config.web_security_enabled {
-            eprintln!("[rustino] Warning: SetWebSecurityEnabled(false) is only supported on Windows (WebView2). Ignored on this platform.");
+            log_warning(config, "[rustino] Warning: SetWebSecurityEnabled(false) is only supported on Windows (WebView2). Ignored on this platform.");
         }
         if config.ignore_certificate_errors {
-            eprintln!("[rustino] Warning: SetIgnoreCertificateErrorsEnabled(true) is only supported on Windows (WebView2). Ignored on this platform.");
+            log_warning(config, "[rustino] Warning: SetIgnoreCertificateErrorsEnabled(true) is only supported on Windows (WebView2). Ignored on this platform.");
         }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn log_warning(config: &WindowConfig, message: &str) {
+    if let Some(callback) = config.log_callback {
+        let c_message = std::ffi::CString::new(message).unwrap_or_default();
+        unsafe {
+            callback(config.log_context, 3, c_message.as_ptr());
+        }
+    } else if config.log_verbosity > 0 {
+        eprintln!("{}", message);
     }
 }
 
@@ -371,6 +386,52 @@ fn center_window(window: &tao::window::Window) {
         let y = monitor_pos.y + ((monitor_size.height as i32 - window_size.height as i32) / 2);
         window.set_outer_position(PhysicalPosition::new(x, y));
     }
+}
+
+fn update_monitor_cache(window: &tao::window::Window, state: &SharedState) {
+    let primary = window.primary_monitor();
+    let monitors: Vec<serde_json::Value> = window
+        .available_monitors()
+        .map(|m| {
+            let pos = m.position();
+            let size = m.size();
+            let is_primary = primary
+                .as_ref()
+                .map_or(false, |p| p.name() == m.name() && p.position() == m.position());
+            serde_json::json!({
+                "name": m.name(),
+                "x": pos.x,
+                "y": pos.y,
+                "width": size.width,
+                "height": size.height,
+                "scaleFactor": m.scale_factor(),
+                "isPrimary": is_primary
+            })
+        })
+        .collect();
+    let monitors_json = serde_json::to_string(&monitors).unwrap_or_default();
+
+    let current_json = if let Some(m) = window.current_monitor() {
+        let pos = m.position();
+        let size = m.size();
+        let is_primary = primary
+            .as_ref()
+            .map_or(false, |p| p.name() == m.name() && p.position() == m.position());
+        serde_json::to_string(&serde_json::json!({
+            "name": m.name(),
+            "x": pos.x,
+            "y": pos.y,
+            "width": size.width,
+            "height": size.height,
+            "scaleFactor": m.scale_factor(),
+            "isPrimary": is_primary
+        }))
+        .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    state.store_monitors(&monitors_json, &current_json);
 }
 
 fn dispatch_command(
@@ -527,127 +588,20 @@ fn dispatch_command(
                 unsafe { cb(callbacks.context) };
             }
         }
-        RustinoCommand::ShowOpenFileDialog(params, tx) => {
-            let result = run_open_file_dialog(window, &params);
-            let _ = tx.send(result);
-        }
-        RustinoCommand::ShowSaveFileDialog(params, tx) => {
-            let result = run_save_file_dialog(window, &params);
-            let _ = tx.send(result);
-        }
-        RustinoCommand::ShowSelectFolderDialog(params, tx) => {
-            let result = run_select_folder_dialog(window, &params);
-            let _ = tx.send(result);
-        }
+        RustinoCommand::ShowOpenFileDialog(..) |
+        RustinoCommand::ShowSaveFileDialog(..) |
+        RustinoCommand::ShowSelectFolderDialog(..) => {}
         RustinoCommand::GetMonitors(tx) => {
-            let primary = window.primary_monitor();
-            let monitors: Vec<serde_json::Value> = window
-                .available_monitors()
-                .map(|m| {
-                    let pos = m.position();
-                    let size = m.size();
-                    let is_primary = primary.as_ref().map_or(false, |p| p.name() == m.name() && p.position() == m.position());
-                    serde_json::json!({
-                        "name": m.name(),
-                        "x": pos.x,
-                        "y": pos.y,
-                        "width": size.width,
-                        "height": size.height,
-                        "scaleFactor": m.scale_factor(),
-                        "isPrimary": is_primary
-                    })
-                })
-                .collect();
-            let _ = tx.send(serde_json::to_string(&monitors).unwrap_or_default());
+            update_monitor_cache(window, state);
+            let _ = tx.send(state.load_monitors());
         }
         RustinoCommand::GetCurrentMonitor(tx) => {
-            let primary = window.primary_monitor();
-            let json = if let Some(m) = window.current_monitor() {
-                let pos = m.position();
-                let size = m.size();
-                let is_primary = primary.as_ref().map_or(false, |p| p.name() == m.name() && p.position() == m.position());
-                serde_json::to_string(&serde_json::json!({
-                    "name": m.name(),
-                    "x": pos.x,
-                    "y": pos.y,
-                    "width": size.width,
-                    "height": size.height,
-                    "scaleFactor": m.scale_factor(),
-                    "isPrimary": is_primary
-                })).unwrap_or_default()
-            } else {
-                String::new()
-            };
-            let _ = tx.send(json);
+            update_monitor_cache(window, state);
+            let _ = tx.send(state.load_current_monitor());
         }
         RustinoCommand::Close => return true,
     }
     false
-}
-
-fn apply_dialog_common(
-    dialog: rfd::FileDialog,
-    window: &tao::window::Window,
-    params: &DialogParams,
-) -> rfd::FileDialog {
-    let mut d = dialog.set_parent(window);
-    if let Some(ref title) = params.title {
-        d = d.set_title(title);
-    }
-    if let Some(ref path) = params.default_path {
-        let p = std::path::Path::new(path);
-        if p.is_dir() {
-            d = d.set_directory(p);
-        } else {
-            if let Some(parent) = p.parent() {
-                d = d.set_directory(parent);
-            }
-            if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
-                d = d.set_file_name(name);
-            }
-        }
-    }
-    for (name, exts) in &params.filters {
-        let ext_refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
-        d = d.add_filter(name, &ext_refs);
-    }
-    d
-}
-
-fn run_open_file_dialog(
-    window: &tao::window::Window,
-    params: &DialogParams,
-) -> Option<Vec<String>> {
-    let d = apply_dialog_common(rfd::FileDialog::new(), window, params);
-    if params.multi_select {
-        d.pick_files()
-            .map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
-    } else {
-        d.pick_file()
-            .map(|p| vec![p.to_string_lossy().into_owned()])
-    }
-}
-
-fn run_save_file_dialog(
-    window: &tao::window::Window,
-    params: &DialogParams,
-) -> Option<String> {
-    let d = apply_dialog_common(rfd::FileDialog::new(), window, params);
-    d.save_file().map(|p| p.to_string_lossy().into_owned())
-}
-
-fn run_select_folder_dialog(
-    window: &tao::window::Window,
-    params: &DialogParams,
-) -> Option<Vec<String>> {
-    let d = apply_dialog_common(rfd::FileDialog::new(), window, params);
-    if params.multi_select {
-        d.pick_folders()
-            .map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
-    } else {
-        d.pick_folder()
-            .map(|p| vec![p.to_string_lossy().into_owned()])
-    }
 }
 
 // --- Menu platform helpers ---
@@ -919,3 +873,4 @@ fn load_tray_icon(path: &str) -> Option<tray_icon::Icon> {
     let (w, h) = img.dimensions();
     tray_icon::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
+

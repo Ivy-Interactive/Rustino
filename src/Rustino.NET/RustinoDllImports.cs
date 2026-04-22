@@ -54,7 +54,8 @@ internal static class RustinoDllImports
     internal static extern int rustino_show_notification(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string title,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string body,
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string? icon);
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? icon,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? appId);
 
     // --- Dual-mode setters ---
 
@@ -294,4 +295,18 @@ internal static class RustinoDllImports
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void rustino_set_tray_icon_event_handler(IntPtr instance, VoidContextCallback handler);
+
+    // --- Splashscreen ---
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern IntPtr rustino_splash_create(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string imagePath,
+        int width,
+        int height);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_splash_close(IntPtr splash);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_splash_dtor(IntPtr splash);
 }

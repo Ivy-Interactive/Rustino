@@ -18,4 +18,6 @@ internal struct RustinoNativeParameters
     public int IgnoreCertificateErrors;
     public int WebSecurityEnabled;
     public int LogVerbosity;
+    public IntPtr LogCallback;
+    public IntPtr LogContext;
 }

@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod icon;
 mod menu;
+mod splash;
 mod state;
 mod util;
 mod window;
@@ -78,6 +79,7 @@ pub extern "C" fn rustino_show_notification(
     title: *const c_char,
     body: *const c_char,
     icon: *const c_char,
+    app_id: *const c_char,
 ) -> i32 {
     catch_unwind(|| {
         let title = unsafe { util::cstr_to_string(title) }.unwrap_or_default();
@@ -87,6 +89,12 @@ pub extern "C" fn rustino_show_notification(
         if let Some(icon_path) = unsafe { util::cstr_to_string(icon) } {
             n.icon(&icon_path);
         }
+        #[cfg(target_os = "windows")]
+        if let Some(id) = unsafe { util::cstr_to_string(app_id) } {
+            n.app_id(&id);
+        }
+        #[cfg(not(target_os = "windows"))]
+        let _ = app_id;
         if n.show().is_ok() { 1 } else { 0 }
     })
     .unwrap_or(0)
@@ -570,16 +578,54 @@ fn parse_filters(raw: *const c_char) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
+fn apply_dialog_common(
+    dialog: rfd::FileDialog,
+    params: &commands::DialogParams,
+) -> rfd::FileDialog {
+    let mut d = dialog;
+    if let Some(ref title) = params.title {
+        d = d.set_title(title);
+    }
+    if let Some(ref path) = params.default_path {
+        let p = std::path::Path::new(path);
+        if p.is_dir() {
+            d = d.set_directory(p);
+        } else {
+            if let Some(parent) = p.parent() {
+                d = d.set_directory(parent);
+            }
+            if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                d = d.set_file_name(name);
+            }
+        }
+    }
+    for (name, exts) in &params.filters {
+        let ext_refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
+        d = d.add_filter(name, &ext_refs);
+    }
+    d
+}
+
+#[cfg(target_os = "windows")]
+fn init_dialog_com() {
+    unsafe {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn init_dialog_com() {}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rustino_show_open_file_dialog(
-    instance: *mut RustinoWindow,
+    _instance: *mut RustinoWindow,
     title: *const c_char,
     default_path: *const c_char,
     filters: *const c_char,
     multi_select: i32,
 ) -> *mut c_char {
     catch_unwind(|| {
-        let inst = unsafe { instance.as_ref() }?;
         let params = commands::DialogParams {
             title: unsafe { util::cstr_to_string(title) },
             default_path: unsafe { util::cstr_to_string(default_path) },
@@ -587,7 +633,16 @@ pub extern "C" fn rustino_show_open_file_dialog(
             multi_select: multi_select != 0,
         };
         let (tx, rx) = std::sync::mpsc::channel();
-        inst.send_command(RustinoCommand::ShowOpenFileDialog(params, tx));
+        std::thread::spawn(move || {
+            init_dialog_com();
+            let d = apply_dialog_common(rfd::FileDialog::new(), &params);
+            let result = if params.multi_select {
+                d.pick_files().map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+            } else {
+                d.pick_file().map(|p| vec![p.to_string_lossy().into_owned()])
+            };
+            let _ = tx.send(result);
+        });
         let paths = rx.recv().ok()??;
         let joined = paths.join("\n");
         std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
@@ -599,13 +654,12 @@ pub extern "C" fn rustino_show_open_file_dialog(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rustino_show_save_file_dialog(
-    instance: *mut RustinoWindow,
+    _instance: *mut RustinoWindow,
     title: *const c_char,
     default_path: *const c_char,
     filters: *const c_char,
 ) -> *mut c_char {
     catch_unwind(|| {
-        let inst = unsafe { instance.as_ref() }?;
         let params = commands::DialogParams {
             title: unsafe { util::cstr_to_string(title) },
             default_path: unsafe { util::cstr_to_string(default_path) },
@@ -613,7 +667,12 @@ pub extern "C" fn rustino_show_save_file_dialog(
             multi_select: false,
         };
         let (tx, rx) = std::sync::mpsc::channel();
-        inst.send_command(RustinoCommand::ShowSaveFileDialog(params, tx));
+        std::thread::spawn(move || {
+            init_dialog_com();
+            let d = apply_dialog_common(rfd::FileDialog::new(), &params);
+            let result = d.save_file().map(|p| p.to_string_lossy().into_owned());
+            let _ = tx.send(result);
+        });
         let path = rx.recv().ok()??;
         std::ffi::CString::new(path).ok().map(|s| s.into_raw())
     })
@@ -624,13 +683,12 @@ pub extern "C" fn rustino_show_save_file_dialog(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rustino_show_select_folder_dialog(
-    instance: *mut RustinoWindow,
+    _instance: *mut RustinoWindow,
     title: *const c_char,
     default_path: *const c_char,
     multi_select: i32,
 ) -> *mut c_char {
     catch_unwind(|| {
-        let inst = unsafe { instance.as_ref() }?;
         let params = commands::DialogParams {
             title: unsafe { util::cstr_to_string(title) },
             default_path: unsafe { util::cstr_to_string(default_path) },
@@ -638,7 +696,16 @@ pub extern "C" fn rustino_show_select_folder_dialog(
             multi_select: multi_select != 0,
         };
         let (tx, rx) = std::sync::mpsc::channel();
-        inst.send_command(RustinoCommand::ShowSelectFolderDialog(params, tx));
+        std::thread::spawn(move || {
+            init_dialog_com();
+            let d = apply_dialog_common(rfd::FileDialog::new(), &params);
+            let result = if params.multi_select {
+                d.pick_folders().map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+            } else {
+                d.pick_folder().map(|p| vec![p.to_string_lossy().into_owned()])
+            };
+            let _ = tx.send(result);
+        });
         let paths = rx.recv().ok()??;
         let joined = paths.join("\n");
         std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
@@ -670,9 +737,7 @@ pub extern "C" fn rustino_set_badge_count(instance: *mut RustinoWindow, count: i
 pub extern "C" fn rustino_get_monitors(instance: *mut RustinoWindow) -> *mut c_char {
     catch_unwind(|| {
         let inst = unsafe { instance.as_ref() }?;
-        let (tx, rx) = std::sync::mpsc::channel();
-        inst.send_command(RustinoCommand::GetMonitors(tx));
-        let json = rx.recv().ok()?;
+        let json = inst.state.load_monitors();
         if json.is_empty() { return None; }
         std::ffi::CString::new(json).ok().map(|s| s.into_raw())
     })
@@ -685,9 +750,7 @@ pub extern "C" fn rustino_get_monitors(instance: *mut RustinoWindow) -> *mut c_c
 pub extern "C" fn rustino_get_current_monitor(instance: *mut RustinoWindow) -> *mut c_char {
     catch_unwind(|| {
         let inst = unsafe { instance.as_ref() }?;
-        let (tx, rx) = std::sync::mpsc::channel();
-        inst.send_command(RustinoCommand::GetCurrentMonitor(tx));
-        let json = rx.recv().ok()?;
+        let json = inst.state.load_current_monitor();
         if json.is_empty() { return None; }
         std::ffi::CString::new(json).ok().map(|s| s.into_raw())
     })
@@ -905,4 +968,50 @@ pub extern "C" fn rustino_set_tray_icon_event_handler(
             inst.callbacks.on_tray_icon_clicked = handler;
         }
     });
+}
+
+// ---------------------------------------------------------------------------
+// Splashscreen (standalone — no event loop required)
+// ---------------------------------------------------------------------------
+
+/// # Safety
+/// `image_path` must be a valid null-terminated C string pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_splash_create(
+    image_path: *const c_char,
+    width: i32,
+    height: i32,
+) -> *mut splash::SplashWindow {
+    let path = match unsafe { util::cstr_to_string(image_path) } {
+        Some(p) => p,
+        None => return std::ptr::null_mut(),
+    };
+    let w = width.max(1) as u32;
+    let h = height.max(1) as u32;
+
+    match splash::SplashWindow::new(&path, w, h) {
+        Ok(splash) => Box::into_raw(Box::new(splash)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// # Safety
+/// `splash` must be a valid pointer returned from `rustino_splash_create`, or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_splash_close(splash: *mut splash::SplashWindow) {
+    if let Some(s) = unsafe { splash.as_ref() } {
+        s.close();
+    }
+}
+
+/// # Safety
+/// `splash` must be a valid pointer returned from `rustino_splash_create`, or null.
+/// After calling this, the pointer is invalid and must not be used again.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_splash_dtor(splash: *mut splash::SplashWindow) {
+    if !splash.is_null() {
+        unsafe {
+            drop(Box::from_raw(splash));
+        }
+    }
 }
