@@ -17,5 +17,8 @@ Thumbs.db
 # NuGet
 *.nupkg
 
+# Native binaries
+*.dll
+
 # CI-staged native binaries
 src/Rustino.NET/runtimes/
