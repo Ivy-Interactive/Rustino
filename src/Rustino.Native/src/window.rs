@@ -42,10 +42,10 @@ impl RustinoWindow {
     }
 
     pub fn send_command(&self, cmd: RustinoCommand) -> bool {
-        if let Ok(guard) = self.proxy.read() {
-            if let Some(proxy) = guard.as_ref() {
-                return proxy.send_event(cmd).is_ok();
-            }
+        if let Ok(guard) = self.proxy.read()
+            && let Some(proxy) = guard.as_ref()
+        {
+            return proxy.send_event(cmd).is_ok();
         }
         false
     }
@@ -88,10 +88,10 @@ impl RustinoWindow {
             window_builder = window_builder.with_max_inner_size(PhysicalSize::new(w, h));
         }
 
-        if let Some(ref icon_path) = config.icon_file {
-            if let Some(ico) = icon::load_icon(icon_path) {
-                window_builder = window_builder.with_window_icon(Some(ico));
-            }
+        if let Some(ref icon_path) = config.icon_file
+            && let Some(ico) = icon::load_icon(icon_path)
+        {
+            window_builder = window_builder.with_window_icon(Some(ico));
         }
 
         if let Some(color) = config.background_color {
