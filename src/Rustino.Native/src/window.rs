@@ -306,6 +306,10 @@ impl RustinoWindow {
                                 };
                             }
                         }
+                        WindowEvent::KeyboardInput { .. } => {
+                            // Forward keyboard events to the webview by not consuming them
+                            // The webview's internal handler will process these events
+                        }
                         _ => {}
                     }
                 }
