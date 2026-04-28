@@ -252,6 +252,13 @@ impl RustinoWindow {
         let mut current_menu: Option<muda::Menu> = None;
         let mut tray: Option<tray_icon::TrayIcon> = None;
 
+        #[cfg(target_os = "macos")]
+        {
+            let default_menu = create_default_macos_menu();
+            attach_menu_to_window(&default_menu, &window);
+            current_menu = Some(default_menu);
+        }
+
         event_loop.run_return(move |event, _, control_flow| {
             if *control_flow != ControlFlow::Exit {
                 *control_flow = ControlFlow::Wait;
@@ -614,6 +621,29 @@ fn dispatch_command(
 
 // --- Menu platform helpers ---
 
+#[cfg(target_os = "macos")]
+pub(crate) fn create_default_macos_menu() -> muda::Menu {
+    let default_menu = muda::Menu::new();
+    
+    let app_menu = muda::Submenu::new("App", true);
+    let _ = app_menu.append(&muda::PredefinedMenuItem::about(None, None));
+    let _ = app_menu.append(&muda::PredefinedMenuItem::separator());
+    let _ = app_menu.append(&muda::PredefinedMenuItem::quit(None));
+    let _ = default_menu.append(&app_menu);
+
+    let edit_menu = muda::Submenu::new("Edit", true);
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::undo(None));
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::redo(None));
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::separator());
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::cut(None));
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::copy(None));
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::paste(None));
+    let _ = edit_menu.append(&muda::PredefinedMenuItem::select_all(None));
+    let _ = default_menu.append(&edit_menu);
+
+    default_menu
+}
+
 fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "windows")]
     {
@@ -920,5 +950,14 @@ mod tests {
             wry::NewWindowResponse::Deny => {}
             _ => panic!("Expected Deny"),
         }
+    }
+
+    #[test]
+    #[ignore = "muda::Menu can only be created on the main thread on macOS"]
+    #[cfg(target_os = "macos")]
+    fn test_create_default_macos_menu() {
+        let menu = super::create_default_macos_menu();
+        let items = menu.items();
+        assert_eq!(items.len(), 2, "Menu should have exactly 2 submenus (App and Edit)");
     }
 }
