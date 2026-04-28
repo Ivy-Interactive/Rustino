@@ -1,3 +1,8 @@
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::unnecessary_map_or)]
+
 mod callbacks;
 mod commands;
 mod config;
@@ -22,7 +27,7 @@ use window::RustinoWindow;
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_ctor(params: *const RustinoInitParams) -> *mut RustinoWindow {
+pub unsafe extern "C" fn rustino_ctor(params: *const RustinoInitParams) -> *mut RustinoWindow {
     catch_unwind(|| {
         if params.is_null() {
             return std::ptr::null_mut();
@@ -35,7 +40,7 @@ pub extern "C" fn rustino_ctor(params: *const RustinoInitParams) -> *mut Rustino
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_dtor(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_dtor(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if !instance.is_null() {
             unsafe {
@@ -46,7 +51,7 @@ pub extern "C" fn rustino_dtor(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_wait_for_exit(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_wait_for_exit(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.run();
@@ -55,7 +60,7 @@ pub extern "C" fn rustino_wait_for_exit(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_close(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_close(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             inst.send_command(RustinoCommand::Close);
@@ -64,7 +69,7 @@ pub extern "C" fn rustino_close(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn rustino_free_string(s: *mut c_char) {
     let _ = catch_unwind(|| {
         util::free_cstring(s);
     });
@@ -75,7 +80,7 @@ pub extern "C" fn rustino_free_string(s: *mut c_char) {
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_show_notification(
+pub unsafe extern "C" fn rustino_show_notification(
     title: *const c_char,
     body: *const c_char,
     icon: *const c_char,
@@ -105,7 +110,7 @@ pub extern "C" fn rustino_show_notification(
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_title(instance: *mut RustinoWindow, title: *const c_char) {
+pub unsafe extern "C" fn rustino_set_title(instance: *mut RustinoWindow, title: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             if let Some(t) = unsafe { util::cstr_to_string(title) } {
@@ -118,7 +123,7 @@ pub extern "C" fn rustino_set_title(instance: *mut RustinoWindow, title: *const 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_size(instance: *mut RustinoWindow, width: i32, height: i32) {
+pub unsafe extern "C" fn rustino_set_size(instance: *mut RustinoWindow, width: i32, height: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let w = width.max(1) as u32;
@@ -132,7 +137,7 @@ pub extern "C" fn rustino_set_size(instance: *mut RustinoWindow, width: i32, hei
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_resizable(instance: *mut RustinoWindow, resizable: i32) {
+pub unsafe extern "C" fn rustino_set_resizable(instance: *mut RustinoWindow, resizable: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let v = resizable != 0;
@@ -144,7 +149,7 @@ pub extern "C" fn rustino_set_resizable(instance: *mut RustinoWindow, resizable:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_topmost(instance: *mut RustinoWindow, topmost: i32) {
+pub unsafe extern "C" fn rustino_set_topmost(instance: *mut RustinoWindow, topmost: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let v = topmost != 0;
@@ -156,7 +161,7 @@ pub extern "C" fn rustino_set_topmost(instance: *mut RustinoWindow, topmost: i32
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_icon_file(instance: *mut RustinoWindow, path: *const c_char) {
+pub unsafe extern "C" fn rustino_set_icon_file(instance: *mut RustinoWindow, path: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             if let Some(p) = unsafe { util::cstr_to_string(path) } {
@@ -169,7 +174,7 @@ pub extern "C" fn rustino_set_icon_file(instance: *mut RustinoWindow, path: *con
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_center(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_center(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             if !inst.send_command(RustinoCommand::Center) {
@@ -180,7 +185,7 @@ pub extern "C" fn rustino_center(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_navigate_to_url(instance: *mut RustinoWindow, url: *const c_char) {
+pub unsafe extern "C" fn rustino_navigate_to_url(instance: *mut RustinoWindow, url: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             if let Some(u) = unsafe { util::cstr_to_string(url) } {
@@ -194,24 +199,23 @@ pub extern "C" fn rustino_navigate_to_url(instance: *mut RustinoWindow, url: *co
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_navigate_to_string(
+pub unsafe extern "C" fn rustino_navigate_to_string(
     instance: *mut RustinoWindow,
     content: *const c_char,
 ) {
     let _ = catch_unwind(|| {
-        if let Some(inst) = unsafe { instance.as_mut() } {
-            if let Some(c) = unsafe { util::cstr_to_string(content) } {
-                if !inst.send_command(RustinoCommand::LoadHtml(c.clone())) {
-                    inst.config.start_html = Some(c);
-                    inst.config.start_url = None;
-                }
-            }
+        if let Some(inst) = unsafe { instance.as_mut() }
+            && let Some(c) = unsafe { util::cstr_to_string(content) }
+            && !inst.send_command(RustinoCommand::LoadHtml(c.clone()))
+        {
+            inst.config.start_html = Some(c);
+            inst.config.start_url = None;
         }
     });
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_background_color(
+pub unsafe extern "C" fn rustino_set_background_color(
     instance: *mut RustinoWindow,
     r: u8,
     g: u8,
@@ -219,10 +223,10 @@ pub extern "C" fn rustino_set_background_color(
     a: u8,
 ) {
     let _ = catch_unwind(|| {
-        if let Some(inst) = unsafe { instance.as_mut() } {
-            if !inst.send_command(RustinoCommand::SetBackgroundColor(r, g, b, a)) {
-                inst.config.background_color = Some((r, g, b, a));
-            }
+        if let Some(inst) = unsafe { instance.as_mut() }
+            && !inst.send_command(RustinoCommand::SetBackgroundColor(r, g, b, a))
+        {
+            inst.config.background_color = Some((r, g, b, a));
         }
     });
 }
@@ -232,7 +236,7 @@ pub extern "C" fn rustino_set_background_color(
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_use_os_default_size(instance: *mut RustinoWindow, use_default: i32) {
+pub unsafe extern "C" fn rustino_set_use_os_default_size(instance: *mut RustinoWindow, use_default: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.use_os_default_size = use_default != 0;
@@ -241,7 +245,7 @@ pub extern "C" fn rustino_set_use_os_default_size(instance: *mut RustinoWindow, 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_devtools_enabled(instance: *mut RustinoWindow, enabled: i32) {
+pub unsafe extern "C" fn rustino_set_devtools_enabled(instance: *mut RustinoWindow, enabled: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.devtools_enabled = enabled != 0;
@@ -250,7 +254,7 @@ pub extern "C" fn rustino_set_devtools_enabled(instance: *mut RustinoWindow, ena
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_clipboard_enabled(instance: *mut RustinoWindow, enabled: i32) {
+pub unsafe extern "C" fn rustino_set_clipboard_enabled(instance: *mut RustinoWindow, enabled: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.clipboard_enabled = enabled != 0;
@@ -259,7 +263,7 @@ pub extern "C" fn rustino_set_clipboard_enabled(instance: *mut RustinoWindow, en
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_ignore_cert_errors(instance: *mut RustinoWindow, enabled: i32) {
+pub unsafe extern "C" fn rustino_set_ignore_cert_errors(instance: *mut RustinoWindow, enabled: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.ignore_certificate_errors = enabled != 0;
@@ -268,7 +272,7 @@ pub extern "C" fn rustino_set_ignore_cert_errors(instance: *mut RustinoWindow, e
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_web_security_enabled(instance: *mut RustinoWindow, enabled: i32) {
+pub unsafe extern "C" fn rustino_set_web_security_enabled(instance: *mut RustinoWindow, enabled: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.web_security_enabled = enabled != 0;
@@ -277,7 +281,7 @@ pub extern "C" fn rustino_set_web_security_enabled(instance: *mut RustinoWindow,
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_transparent(instance: *mut RustinoWindow, transparent: i32) {
+pub unsafe extern "C" fn rustino_set_transparent(instance: *mut RustinoWindow, transparent: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.transparent = transparent != 0;
@@ -286,7 +290,7 @@ pub extern "C" fn rustino_set_transparent(instance: *mut RustinoWindow, transpar
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_decorations(instance: *mut RustinoWindow, decorated: i32) {
+pub unsafe extern "C" fn rustino_set_decorations(instance: *mut RustinoWindow, decorated: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let v = decorated != 0;
@@ -298,7 +302,7 @@ pub extern "C" fn rustino_set_decorations(instance: *mut RustinoWindow, decorate
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_user_agent(instance: *mut RustinoWindow, ua: *const c_char) {
+pub unsafe extern "C" fn rustino_set_user_agent(instance: *mut RustinoWindow, ua: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.user_agent = unsafe { util::cstr_to_string(ua) };
@@ -307,7 +311,7 @@ pub extern "C" fn rustino_set_user_agent(instance: *mut RustinoWindow, ua: *cons
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_user_data_folder(instance: *mut RustinoWindow, path: *const c_char) {
+pub unsafe extern "C" fn rustino_set_user_data_folder(instance: *mut RustinoWindow, path: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.user_data_folder = unsafe { util::cstr_to_string(path) };
@@ -316,7 +320,7 @@ pub extern "C" fn rustino_set_user_data_folder(instance: *mut RustinoWindow, pat
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_media_autoplay(instance: *mut RustinoWindow, enabled: i32) {
+pub unsafe extern "C" fn rustino_set_media_autoplay(instance: *mut RustinoWindow, enabled: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.media_autoplay = enabled != 0;
@@ -325,7 +329,7 @@ pub extern "C" fn rustino_set_media_autoplay(instance: *mut RustinoWindow, enabl
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_zoom_hotkeys(instance: *mut RustinoWindow, enabled: i32) {
+pub unsafe extern "C" fn rustino_set_zoom_hotkeys(instance: *mut RustinoWindow, enabled: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             inst.config.zoom_hotkeys = enabled != 0;
@@ -334,7 +338,7 @@ pub extern "C" fn rustino_set_zoom_hotkeys(instance: *mut RustinoWindow, enabled
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_add_init_script(instance: *mut RustinoWindow, js: *const c_char) {
+pub unsafe extern "C" fn rustino_add_init_script(instance: *mut RustinoWindow, js: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             if let Some(s) = unsafe { util::cstr_to_string(js) } {
@@ -349,7 +353,7 @@ pub extern "C" fn rustino_add_init_script(instance: *mut RustinoWindow, js: *con
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_minimized(instance: *mut RustinoWindow, minimized: i32) {
+pub unsafe extern "C" fn rustino_set_minimized(instance: *mut RustinoWindow, minimized: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             inst.send_command(RustinoCommand::SetMinimized(minimized != 0));
@@ -358,7 +362,7 @@ pub extern "C" fn rustino_set_minimized(instance: *mut RustinoWindow, minimized:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_maximized(instance: *mut RustinoWindow, maximized: i32) {
+pub unsafe extern "C" fn rustino_set_maximized(instance: *mut RustinoWindow, maximized: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let v = maximized != 0;
@@ -370,7 +374,7 @@ pub extern "C" fn rustino_set_maximized(instance: *mut RustinoWindow, maximized:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_fullscreen(instance: *mut RustinoWindow, fullscreen: i32) {
+pub unsafe extern "C" fn rustino_set_fullscreen(instance: *mut RustinoWindow, fullscreen: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let v = fullscreen != 0;
@@ -382,7 +386,7 @@ pub extern "C" fn rustino_set_fullscreen(instance: *mut RustinoWindow, fullscree
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_visible(instance: *mut RustinoWindow, visible: i32) {
+pub unsafe extern "C" fn rustino_set_visible(instance: *mut RustinoWindow, visible: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let v = visible != 0;
@@ -394,7 +398,7 @@ pub extern "C" fn rustino_set_visible(instance: *mut RustinoWindow, visible: i32
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_focus(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_set_focus(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             inst.send_command(RustinoCommand::SetFocus);
@@ -403,7 +407,7 @@ pub extern "C" fn rustino_set_focus(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_position(instance: *mut RustinoWindow, x: i32, y: i32) {
+pub unsafe extern "C" fn rustino_set_position(instance: *mut RustinoWindow, x: i32, y: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             if !inst.send_command(RustinoCommand::SetPosition(x, y)) {
@@ -414,7 +418,7 @@ pub extern "C" fn rustino_set_position(instance: *mut RustinoWindow, x: i32, y: 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_min_size(instance: *mut RustinoWindow, width: i32, height: i32) {
+pub unsafe extern "C" fn rustino_set_min_size(instance: *mut RustinoWindow, width: i32, height: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let size = if width > 0 && height > 0 {
@@ -430,7 +434,7 @@ pub extern "C" fn rustino_set_min_size(instance: *mut RustinoWindow, width: i32,
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_max_size(instance: *mut RustinoWindow, width: i32, height: i32) {
+pub unsafe extern "C" fn rustino_set_max_size(instance: *mut RustinoWindow, width: i32, height: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
             let size = if width > 0 && height > 0 {
@@ -450,7 +454,7 @@ pub extern "C" fn rustino_set_max_size(instance: *mut RustinoWindow, width: i32,
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_is_minimized(instance: *mut RustinoWindow) -> i32 {
+pub unsafe extern "C" fn rustino_is_minimized(instance: *mut RustinoWindow) -> i32 {
     catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if inst.state.is_minimized.load(Ordering::Acquire) { 1 } else { 0 }
@@ -462,7 +466,7 @@ pub extern "C" fn rustino_is_minimized(instance: *mut RustinoWindow) -> i32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_is_maximized(instance: *mut RustinoWindow) -> i32 {
+pub unsafe extern "C" fn rustino_is_maximized(instance: *mut RustinoWindow) -> i32 {
     catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if inst.state.is_maximized.load(Ordering::Acquire) { 1 } else { 0 }
@@ -474,7 +478,7 @@ pub extern "C" fn rustino_is_maximized(instance: *mut RustinoWindow) -> i32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_is_fullscreen(instance: *mut RustinoWindow) -> i32 {
+pub unsafe extern "C" fn rustino_is_fullscreen(instance: *mut RustinoWindow) -> i32 {
     catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if inst.state.is_fullscreen.load(Ordering::Acquire) { 1 } else { 0 }
@@ -486,7 +490,7 @@ pub extern "C" fn rustino_is_fullscreen(instance: *mut RustinoWindow) -> i32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_get_position(
+pub unsafe extern "C" fn rustino_get_position(
     instance: *mut RustinoWindow,
     out_x: *mut i32,
     out_y: *mut i32,
@@ -505,7 +509,7 @@ pub extern "C" fn rustino_get_position(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_get_size(
+pub unsafe extern "C" fn rustino_get_size(
     instance: *mut RustinoWindow,
     out_w: *mut i32,
     out_h: *mut i32,
@@ -528,7 +532,7 @@ pub extern "C" fn rustino_get_size(
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_evaluate_script(instance: *mut RustinoWindow, js: *const c_char) {
+pub unsafe extern "C" fn rustino_evaluate_script(instance: *mut RustinoWindow, js: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if let Some(s) = unsafe { util::cstr_to_string(js) } {
@@ -539,7 +543,7 @@ pub extern "C" fn rustino_evaluate_script(instance: *mut RustinoWindow, js: *con
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_send_web_message(instance: *mut RustinoWindow, msg: *const c_char) {
+pub unsafe extern "C" fn rustino_send_web_message(instance: *mut RustinoWindow, msg: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if let Some(m) = unsafe { util::cstr_to_string(msg) } {
@@ -550,7 +554,7 @@ pub extern "C" fn rustino_send_web_message(instance: *mut RustinoWindow, msg: *c
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_zoom(instance: *mut RustinoWindow, factor: f64) {
+pub unsafe extern "C" fn rustino_set_zoom(instance: *mut RustinoWindow, factor: f64) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if factor.is_finite() && factor > 0.0 {
@@ -618,7 +622,7 @@ fn init_dialog_com() {
 fn init_dialog_com() {}
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_show_open_file_dialog(
+pub unsafe extern "C" fn rustino_show_open_file_dialog(
     _instance: *mut RustinoWindow,
     title: *const c_char,
     default_path: *const c_char,
@@ -653,7 +657,7 @@ pub extern "C" fn rustino_show_open_file_dialog(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_show_save_file_dialog(
+pub unsafe extern "C" fn rustino_show_save_file_dialog(
     _instance: *mut RustinoWindow,
     title: *const c_char,
     default_path: *const c_char,
@@ -682,7 +686,7 @@ pub extern "C" fn rustino_show_save_file_dialog(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_show_select_folder_dialog(
+pub unsafe extern "C" fn rustino_show_select_folder_dialog(
     _instance: *mut RustinoWindow,
     title: *const c_char,
     default_path: *const c_char,
@@ -720,7 +724,7 @@ pub extern "C" fn rustino_show_select_folder_dialog(
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_badge_count(instance: *mut RustinoWindow, count: i32) {
+pub unsafe extern "C" fn rustino_set_badge_count(instance: *mut RustinoWindow, count: i32) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             let badge = if count > 0 { Some(count as u32) } else { None };
@@ -734,7 +738,7 @@ pub extern "C" fn rustino_set_badge_count(instance: *mut RustinoWindow, count: i
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_get_monitors(instance: *mut RustinoWindow) -> *mut c_char {
+pub unsafe extern "C" fn rustino_get_monitors(instance: *mut RustinoWindow) -> *mut c_char {
     catch_unwind(|| {
         let inst = unsafe { instance.as_ref() }?;
         let json = inst.state.load_monitors();
@@ -747,7 +751,7 @@ pub extern "C" fn rustino_get_monitors(instance: *mut RustinoWindow) -> *mut c_c
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_get_current_monitor(instance: *mut RustinoWindow) -> *mut c_char {
+pub unsafe extern "C" fn rustino_get_current_monitor(instance: *mut RustinoWindow) -> *mut c_char {
     catch_unwind(|| {
         let inst = unsafe { instance.as_ref() }?;
         let json = inst.state.load_current_monitor();
@@ -764,7 +768,7 @@ pub extern "C" fn rustino_get_current_monitor(instance: *mut RustinoWindow) -> *
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_menu(instance: *mut RustinoWindow, json: *const c_char) {
+pub unsafe extern "C" fn rustino_set_menu(instance: *mut RustinoWindow, json: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             if let Some(j) = unsafe { util::cstr_to_string(json) } {
@@ -775,7 +779,7 @@ pub extern "C" fn rustino_set_menu(instance: *mut RustinoWindow, json: *const c_
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_remove_menu(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_remove_menu(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             inst.send_command(RustinoCommand::RemoveMenu);
@@ -784,7 +788,7 @@ pub extern "C" fn rustino_remove_menu(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_show_context_menu(
+pub unsafe extern "C" fn rustino_show_context_menu(
     instance: *mut RustinoWindow,
     json: *const c_char,
     x: f64,
@@ -805,7 +809,7 @@ pub extern "C" fn rustino_show_context_menu(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_tray_icon(
+pub unsafe extern "C" fn rustino_set_tray_icon(
     instance: *mut RustinoWindow,
     icon_path: *const c_char,
     tooltip: *const c_char,
@@ -826,7 +830,7 @@ pub extern "C" fn rustino_set_tray_icon(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_remove_tray_icon(instance: *mut RustinoWindow) {
+pub unsafe extern "C" fn rustino_remove_tray_icon(instance: *mut RustinoWindow) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             inst.send_command(RustinoCommand::RemoveTrayIcon);
@@ -839,7 +843,7 @@ pub extern "C" fn rustino_remove_tray_icon(instance: *mut RustinoWindow) {
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_callback_context(
+pub unsafe extern "C" fn rustino_set_callback_context(
     instance: *mut RustinoWindow,
     context: *mut c_void,
 ) {
@@ -851,7 +855,7 @@ pub extern "C" fn rustino_set_callback_context(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_closing_handler(
+pub unsafe extern "C" fn rustino_set_closing_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void) -> i32>,
 ) {
@@ -863,7 +867,7 @@ pub extern "C" fn rustino_set_closing_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_closed_handler(
+pub unsafe extern "C" fn rustino_set_closed_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void)>,
 ) {
@@ -875,7 +879,7 @@ pub extern "C" fn rustino_set_closed_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_resized_handler(
+pub unsafe extern "C" fn rustino_set_resized_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, i32, i32)>,
 ) {
@@ -887,7 +891,7 @@ pub extern "C" fn rustino_set_resized_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_moved_handler(
+pub unsafe extern "C" fn rustino_set_moved_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, i32, i32)>,
 ) {
@@ -899,7 +903,7 @@ pub extern "C" fn rustino_set_moved_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_focus_changed_handler(
+pub unsafe extern "C" fn rustino_set_focus_changed_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, i32)>,
 ) {
@@ -911,7 +915,7 @@ pub extern "C" fn rustino_set_focus_changed_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_web_message_received_handler(
+pub unsafe extern "C" fn rustino_set_web_message_received_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
 ) {
@@ -923,7 +927,7 @@ pub extern "C" fn rustino_set_web_message_received_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_page_load_handler(
+pub unsafe extern "C" fn rustino_set_page_load_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, i32, *const c_char)>,
 ) {
@@ -935,7 +939,7 @@ pub extern "C" fn rustino_set_page_load_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_navigation_handler(
+pub unsafe extern "C" fn rustino_set_navigation_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char) -> i32>,
 ) {
@@ -947,7 +951,7 @@ pub extern "C" fn rustino_set_navigation_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_menu_event_handler(
+pub unsafe extern "C" fn rustino_set_menu_event_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
 ) {
@@ -959,7 +963,7 @@ pub extern "C" fn rustino_set_menu_event_handler(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustino_set_tray_icon_event_handler(
+pub unsafe extern "C" fn rustino_set_tray_icon_event_handler(
     instance: *mut RustinoWindow,
     handler: Option<unsafe extern "C" fn(*mut c_void)>,
 ) {

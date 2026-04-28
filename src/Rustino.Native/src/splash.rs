@@ -36,10 +36,10 @@ impl SplashWindow {
     }
 
     pub fn close(&self) {
-        if let Ok(mut sender) = self.close_sender.lock() {
-            if let Some(tx) = sender.take() {
-                let _ = tx.send(());
-            }
+        if let Ok(mut sender) = self.close_sender.lock()
+            && let Some(tx) = sender.take()
+        {
+            let _ = tx.send(());
         }
     }
 }
