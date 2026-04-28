@@ -173,6 +173,10 @@ impl RustinoWindow {
                     Err(_) => true,
                 }
             });
+
+            webview_builder = webview_builder.with_new_window_req_handler(move |url, _features| {
+                handle_new_window_req(url, ctx, cb)
+            });
         }
 
         // Page load handler
@@ -877,4 +881,44 @@ fn load_tray_icon(path: &str) -> Option<tray_icon::Icon> {
     let (w, h) = img.dimensions();
     tray_icon::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
+pub(crate) fn handle_new_window_req(
+    url: String,
+    ctx: *mut std::ffi::c_void,
+    cb: unsafe extern "C" fn(*mut std::ffi::c_void, *const std::ffi::c_char) -> i32,
+) -> wry::NewWindowResponse {
+    if let Ok(cstr) = CString::new(url) {
+        unsafe { cb(ctx, cstr.as_ptr()) };
+    }
+    wry::NewWindowResponse::Deny
+}
 
+#[cfg(test)]
+mod tests {
+    use super::handle_new_window_req;
+    use std::ffi::CStr;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static CALLBACK_CALLED: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "C" fn mock_cb(_ctx: *mut std::ffi::c_void, url: *const std::ffi::c_char) -> i32 {
+        let c_str = unsafe { CStr::from_ptr(url) };
+        assert_eq!(c_str.to_str().unwrap(), "https://example.com");
+        CALLBACK_CALLED.store(true, Ordering::SeqCst);
+        0
+    }
+
+    #[test]
+    fn test_handle_new_window_req() {
+        CALLBACK_CALLED.store(false, Ordering::SeqCst);
+        let resp = handle_new_window_req(
+            "https://example.com".to_string(),
+            std::ptr::null_mut(),
+            mock_cb,
+        );
+        assert!(CALLBACK_CALLED.load(Ordering::SeqCst));
+        match resp {
+            wry::NewWindowResponse::Deny => {}
+            _ => panic!("Expected Deny"),
+        }
+    }
+}
