@@ -232,7 +232,10 @@ internal static class RustinoDllImports
     // --- Badge ---
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-    internal static extern void rustino_set_badge_count(IntPtr instance, int count);
+    internal static extern void rustino_set_badge_count(
+        IntPtr instance, int count,
+        byte bgR, byte bgG, byte bgB,
+        byte fgR, byte fgG, byte fgB);
 
     // --- Menus & Tray ---
 

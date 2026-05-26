@@ -542,8 +542,8 @@ fn dispatch_command(
         RustinoCommand::SetBackgroundColor(r, g, b, a) => {
             let _ = webview.set_background_color((r, g, b, a));
         }
-        RustinoCommand::SetBadgeCount(count) => {
-            set_badge_count(window, count);
+        RustinoCommand::SetBadgeCount { count, bg_r, bg_g, bg_b, fg_r, fg_g, fg_b } => {
+            set_badge_count(window, count, [bg_r, bg_g, bg_b], [fg_r, fg_g, fg_b]);
         }
         RustinoCommand::SetMenu(json) => {
             if let Some(old) = current_menu.take() {
@@ -705,10 +705,10 @@ fn show_context_menu(
 
 // --- Taskbar badge ---
 
-fn set_badge_count(_window: &tao::window::Window, count: Option<u32>) {
+fn set_badge_count(_window: &tao::window::Window, count: Option<u32>, _bg: [u8; 3], _fg: [u8; 3]) {
     #[cfg(target_os = "windows")]
     {
-        set_badge_count_windows(_window, count);
+        set_badge_count_windows(_window, count, _bg, _fg);
     }
     #[cfg(target_os = "macos")]
     {
@@ -717,7 +717,7 @@ fn set_badge_count(_window: &tao::window::Window, count: Option<u32>) {
 }
 
 #[cfg(target_os = "windows")]
-fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>) {
+fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>, bg: [u8; 3], fg: [u8; 3]) {
     use tao::platform::windows::WindowExtWindows;
     use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList};
     use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
@@ -738,7 +738,7 @@ fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>) {
                 let _ = taskbar.SetOverlayIcon(hwnd, HICON::default(), None);
             }
             Some(n) => {
-                if let Some(icon) = create_badge_icon(n) {
+                if let Some(icon) = create_badge_icon(n, bg, fg) {
                     let _ = taskbar.SetOverlayIcon(hwnd, icon, None);
                     let _ = DestroyIcon(icon);
                 }
@@ -748,59 +748,18 @@ fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>) {
 }
 
 #[cfg(target_os = "windows")]
-fn create_badge_icon(count: u32) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
+fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use windows::Win32::UI::WindowsAndMessaging::*;
     use windows::Win32::Graphics::Gdi::*;
+    use windows::core::w;
 
-    let size: i32 = 16;
-    let pixels = size * size;
-    let mut rgba = vec![0u8; (pixels * 4) as usize];
-
-    let cx = size as f32 / 2.0;
-    let cy = size as f32 / 2.0;
-    let r = cx - 0.5;
-
-    for y in 0..size {
-        for x in 0..size {
-            let dx = x as f32 + 0.5 - cx;
-            let dy = y as f32 + 0.5 - cy;
-            let dist = (dx * dx + dy * dy).sqrt();
-            if dist <= r {
-                let alpha = ((r - dist).min(1.0) * 255.0) as u8;
-                let idx = ((y * size + x) * 4) as usize;
-                rgba[idx] = 0x33;     // B
-                rgba[idx + 1] = 0x33; // G
-                rgba[idx + 2] = 0xEE; // R (red)
-                rgba[idx + 3] = alpha; // A
-            }
-        }
-    }
-
-    let text = if count > 99 { "!".to_string() } else { count.to_string() };
-    let glyphs = render_badge_text(&text);
-    let gw = glyphs.first().map_or(0, |row| row.len()) as i32;
-    let gh = glyphs.len() as i32;
-    let ox = (size - gw) / 2;
-    let oy = (size - gh) / 2;
-
-    for (gy, row) in glyphs.iter().enumerate() {
-        for (gx, &pixel) in row.iter().enumerate() {
-            if pixel {
-                let px = ox + gx as i32;
-                let py = oy + gy as i32;
-                if px >= 0 && px < size && py >= 0 && py < size {
-                    let idx = ((py * size + px) * 4) as usize;
-                    if rgba[idx + 3] > 0 {
-                        rgba[idx] = 0xFF;
-                        rgba[idx + 1] = 0xFF;
-                        rgba[idx + 2] = 0xFF;
-                    }
-                }
-            }
-        }
-    }
+    let size: i32 = 32;
 
     unsafe {
+        let hdc_screen = GetDC(None);
+        let hdc = CreateCompatibleDC(Some(hdc_screen));
+        ReleaseDC(None, hdc_screen);
+
         let mut bmi: BITMAPINFO = std::mem::zeroed();
         bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
         bmi.bmiHeader.biWidth = size;
@@ -808,11 +767,115 @@ fn create_badge_icon(count: u32) -> Option<windows::Win32::UI::WindowsAndMessagi
         bmi.bmiHeader.biPlanes = 1;
         bmi.bmiHeader.biBitCount = 32;
 
-        let hdc = CreateCompatibleDC(None);
-        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
+        // --- Pass 1: Render white text on black to get coverage mask ---
+        let mut text_bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let text_bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut text_bits, None, 0).ok()?;
+        let old_bmp = SelectObject(hdc, text_bmp.into());
 
-        std::ptr::copy_nonoverlapping(rgba.as_ptr(), bits as *mut u8, rgba.len());
+        let text_pixels = text_bits as *mut u8;
+        std::ptr::write_bytes(text_pixels, 0, (size * size * 4) as usize);
+
+        let text = if count > 99 { "99+".to_string() } else { count.to_string() };
+        let font_size = if text.len() <= 1 { 22 } else if text.len() == 2 { 18 } else { 14 };
+        let font = CreateFontW(
+            -font_size, 0, 0, 0,
+            FW_BOLD.0 as i32,
+            0, 0, 0,
+            FONT_CHARSET(0),
+            OUT_TT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            ANTIALIASED_QUALITY,
+            DEFAULT_PITCH.0 as u32 | FF_SWISS.0 as u32,
+            w!("Segoe UI"),
+        );
+        let old_font = SelectObject(hdc, font.into());
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, windows::Win32::Foundation::COLORREF(0x00FFFFFF));
+
+        let wide_text: Vec<u16> = text.encode_utf16().collect();
+        let nudge: i32 = 0;
+        let mut rc = windows::Win32::Foundation::RECT {
+            left: nudge, top: 0, right: size + nudge, bottom: size,
+        };
+        DrawTextW(
+            hdc,
+            &mut wide_text.as_slice().to_vec(),
+            &mut rc,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
+        );
+
+        // Read text coverage from red channel (white text on black = coverage in any channel)
+        let mut text_mask = vec![0u8; (size * size) as usize];
+        for i in 0..(size * size) as usize {
+            text_mask[i] = *text_pixels.add(i * 4 + 2); // R channel
+        }
+
+        SelectObject(hdc, old_font);
+        SelectObject(hdc, old_bmp);
+        let _ = DeleteObject(text_bmp.into());
+        let _ = DeleteObject(font.into());
+
+        // --- Pass 2: Compose final icon ---
+        let mut final_bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let final_bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut final_bits, None, 0).ok()?;
+
+        let pixels = final_bits as *mut u8;
+        std::ptr::write_bytes(pixels, 0, (size * size * 4) as usize);
+
+        let cx = size as f32 / 2.0;
+        let cy = size as f32 / 2.0;
+        let r = cx - 0.5;
+        // Sub-pixel shift for single digits (GDI centers on cell, not glyph)
+        let text_shift_x: f32 = if text.len() == 1 { 1.0 } else { 0.0 };
+
+        for y in 0..size {
+            for x in 0..size {
+                let dx = x as f32 + 0.5 - cx;
+                let dy = y as f32 + 0.5 - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist <= r {
+                    let circle_alpha = (r - dist).min(1.0);
+
+                    // Sample text mask with sub-pixel offset (bilinear interpolation)
+                    let sx = x as f32 - text_shift_x;
+                    let sy = y as f32;
+                    let sx0 = sx.floor() as i32;
+                    let sy0 = sy.floor() as i32;
+                    let fx = sx - sx.floor();
+                    let fy = sy - sy.floor();
+                    let sample = |px: i32, py: i32| -> f32 {
+                        if px >= 0 && px < size && py >= 0 && py < size {
+                            text_mask[(py * size + px) as usize] as f32
+                        } else {
+                            0.0
+                        }
+                    };
+                    let c00 = sample(sx0, sy0);
+                    let c10 = sample(sx0 + 1, sy0);
+                    let c01 = sample(sx0, sy0 + 1);
+                    let c11 = sample(sx0 + 1, sy0 + 1);
+                    let coverage = (c00 * (1.0 - fx) * (1.0 - fy)
+                        + c10 * fx * (1.0 - fy)
+                        + c01 * (1.0 - fx) * fy
+                        + c11 * fx * fy) / 255.0;
+
+                    // Blend: text foreground over background, then apply circle alpha
+                    let out_r = fg[0] as f32 * coverage + bg[0] as f32 * (1.0 - coverage);
+                    let out_g = fg[1] as f32 * coverage + bg[1] as f32 * (1.0 - coverage);
+                    let out_b = fg[2] as f32 * coverage + bg[2] as f32 * (1.0 - coverage);
+                    let alpha = (circle_alpha * 255.0) as u8;
+
+                    let i = (y * size + x) as usize;
+                    let idx = i * 4;
+                    let p = pixels.add(idx);
+                    // Premultiplied BGRA
+                    *p = ((out_b * circle_alpha) as u8).min(alpha);
+                    *p.add(1) = ((out_g * circle_alpha) as u8).min(alpha);
+                    *p.add(2) = ((out_r * circle_alpha) as u8).min(alpha);
+                    *p.add(3) = alpha;
+                }
+            }
+        }
 
         let mask = CreateBitmap(size, size, 1, 1, None);
         let ii = ICONINFO {
@@ -820,71 +883,16 @@ fn create_badge_icon(count: u32) -> Option<windows::Win32::UI::WindowsAndMessagi
             xHotspot: 0,
             yHotspot: 0,
             hbmMask: mask,
-            hbmColor: bmp,
+            hbmColor: final_bmp,
         };
         let icon = CreateIconIndirect(&ii).ok();
 
-        let _ = DeleteObject(bmp.into());
+        let _ = DeleteObject(final_bmp.into());
         let _ = DeleteObject(mask.into());
         let _ = DeleteDC(hdc);
 
         icon
     }
-}
-
-#[cfg(target_os = "windows")]
-fn render_badge_text(text: &str) -> Vec<Vec<bool>> {
-    const FONT: [([u8; 5], u8); 11] = [
-        ([0b111, 0b101, 0b101, 0b101, 0b111], 3), // 0
-        ([0b010, 0b110, 0b010, 0b010, 0b111], 3), // 1
-        ([0b111, 0b001, 0b111, 0b100, 0b111], 3), // 2
-        ([0b111, 0b001, 0b111, 0b001, 0b111], 3), // 3
-        ([0b101, 0b101, 0b111, 0b001, 0b001], 3), // 4
-        ([0b111, 0b100, 0b111, 0b001, 0b111], 3), // 5
-        ([0b111, 0b100, 0b111, 0b101, 0b111], 3), // 6
-        ([0b111, 0b001, 0b010, 0b010, 0b010], 3), // 7
-        ([0b111, 0b101, 0b111, 0b101, 0b111], 3), // 8
-        ([0b111, 0b101, 0b111, 0b001, 0b111], 3), // 9
-        ([0b010, 0b101, 0b010, 0b000, 0b010], 3), // ! (for 100+)
-    ];
-
-    let chars: Vec<usize> = text
-        .chars()
-        .filter_map(|c| match c {
-            '0'..='9' => Some((c as u8 - b'0') as usize),
-            '!' => Some(10),
-            _ => None,
-        })
-        .collect();
-
-    if chars.is_empty() {
-        return vec![];
-    }
-
-    let total_width: usize = chars.iter().map(|&i| FONT[i].1 as usize).sum::<usize>()
-        + chars.len().saturating_sub(1);
-
-    let mut rows = vec![vec![false; total_width]; 5];
-    let mut x_offset = 0usize;
-
-    for (ci, &idx) in chars.iter().enumerate() {
-        let (glyph_rows, w) = FONT[idx];
-        let w = w as usize;
-        for (row, &bits) in glyph_rows.iter().enumerate() {
-            for col in 0..w {
-                let bit = (bits >> (w - 1 - col)) & 1;
-                if bit == 1 {
-                    rows[row][x_offset + col] = true;
-                }
-            }
-        }
-        x_offset += w;
-        if ci < chars.len() - 1 {
-            x_offset += 1; // 1px spacing between characters
-        }
-    }
-
-    rows
 }
 
 #[cfg(target_os = "macos")]

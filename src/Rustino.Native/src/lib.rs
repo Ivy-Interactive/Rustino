@@ -724,11 +724,28 @@ pub unsafe extern "C" fn rustino_show_select_folder_dialog(
 // ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rustino_set_badge_count(instance: *mut RustinoWindow, count: i32) {
+pub unsafe extern "C" fn rustino_set_badge_count(
+    instance: *mut RustinoWindow,
+    count: i32,
+    bg_r: u8,
+    bg_g: u8,
+    bg_b: u8,
+    fg_r: u8,
+    fg_g: u8,
+    fg_b: u8,
+) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_ref() } {
             let badge = if count > 0 { Some(count as u32) } else { None };
-            inst.send_command(RustinoCommand::SetBadgeCount(badge));
+            inst.send_command(RustinoCommand::SetBadgeCount {
+                count: badge,
+                bg_r,
+                bg_g,
+                bg_b,
+                fg_r,
+                fg_g,
+                fg_b,
+            });
         }
     });
 }

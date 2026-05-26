@@ -505,16 +505,35 @@ public class RustinoWindow : IDisposable
 
     // --- Badge ---
 
-    public RustinoWindow SetBadgeCount(int? count)
+    public RustinoWindow SetBadgeCount(int? count, string? background = null, string? foreground = null)
     {
         if (_nativeHandle != IntPtr.Zero)
-            RustinoDllImports.rustino_set_badge_count(_nativeHandle, count ?? 0);
+        {
+            var (bgR, bgG, bgB) = ParseHexColor(background, 0xE0, 0x1E, 0x5A);
+            var (fgR, fgG, fgB) = ParseHexColor(foreground, 0xFF, 0xFF, 0xFF);
+            RustinoDllImports.rustino_set_badge_count(_nativeHandle, count ?? 0, bgR, bgG, bgB, fgR, fgG, fgB);
+        }
         return this;
     }
 
     public RustinoWindow ClearBadge()
     {
         return SetBadgeCount(null);
+    }
+
+    private static (byte r, byte g, byte b) ParseHexColor(string? hex, byte defaultR, byte defaultG, byte defaultB)
+    {
+        if (string.IsNullOrEmpty(hex))
+            return (defaultR, defaultG, defaultB);
+        var s = hex.StartsWith('#') ? hex[1..] : hex;
+        if (s.Length == 6 &&
+            byte.TryParse(s[0..2], System.Globalization.NumberStyles.HexNumber, null, out var r) &&
+            byte.TryParse(s[2..4], System.Globalization.NumberStyles.HexNumber, null, out var g) &&
+            byte.TryParse(s[4..6], System.Globalization.NumberStyles.HexNumber, null, out var b))
+        {
+            return (r, g, b);
+        }
+        return (defaultR, defaultG, defaultB);
     }
 
     public RustinoWindow RemoveTrayIcon()

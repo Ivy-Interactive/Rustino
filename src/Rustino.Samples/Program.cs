@@ -232,10 +232,16 @@ void HandleMessage(string msg)
             break;
 
         default:
-            if (msg.StartsWith("badge:") && int.TryParse(msg[6..], out var count))
+            if (msg.StartsWith("badge:"))
             {
-                window.SetBadgeCount(count);
-                Log($"Badge set to {count}");
+                var parts = msg[6..].Split(':');
+                if (int.TryParse(parts[0], out var count))
+                {
+                    string? bg = parts.Length > 1 ? parts[1] : null;
+                    string? fg = parts.Length > 2 ? parts[2] : null;
+                    window.SetBadgeCount(count, background: bg, foreground: fg);
+                    Log($"Badge set to {count} (bg={bg ?? "default"}, fg={fg ?? "default"})");
+                }
             }
             else if (msg.StartsWith("move-to:") && int.TryParse(msg[8..], out var idx))
             {
@@ -509,14 +515,20 @@ static string Html() => """
         <h2>Taskbar Badge</h2>
         <p style="color:#888;font-size:0.85rem;margin-bottom:12px">Set a badge count on the taskbar icon. On Windows this renders an overlay; on macOS it sets the dock badge.</p>
         <div class="card">
+          <div class="row" style="align-items:center;margin-bottom:8px">
+            <label style="font-size:0.8rem;color:#aaa;margin-right:6px">BG:</label>
+            <input id="badge-bg" type="color" value="#E01E5A" style="width:32px;height:24px;border:none;background:none;cursor:pointer">
+            <label style="font-size:0.8rem;color:#aaa;margin:0 6px">FG:</label>
+            <input id="badge-fg" type="color" value="#FFFFFF" style="width:32px;height:24px;border:none;background:none;cursor:pointer">
+          </div>
           <div class="row">
-            <button class="o" onclick="send('badge:1')">1</button>
-            <button class="o" onclick="send('badge:2')">2</button>
-            <button class="o" onclick="send('badge:3')">3</button>
-            <button class="o" onclick="send('badge:5')">5</button>
-            <button class="o" onclick="send('badge:10')">10</button>
-            <button class="o" onclick="send('badge:42')">42</button>
-            <button class="o" onclick="send('badge:99')">99</button>
+            <button class="o" onclick="sendBadge(1)">1</button>
+            <button class="o" onclick="sendBadge(2)">2</button>
+            <button class="o" onclick="sendBadge(3)">3</button>
+            <button class="o" onclick="sendBadge(5)">5</button>
+            <button class="o" onclick="sendBadge(10)">10</button>
+            <button class="o" onclick="sendBadge(42)">42</button>
+            <button class="o" onclick="sendBadge(99)">99</button>
             <button class="r" onclick="send('badge-clear')">Clear</button>
           </div>
         </div>
@@ -600,10 +612,15 @@ static string Html() => """
       function clearLog() { document.getElementById('log').textContent = 'Cleared.'; }
       function toggleLog() { document.getElementById('log-bar').classList.toggle('open'); }
 
-      // Badge simulation
+      // Badge
+      function sendBadge(n) {
+        const bg = document.getElementById('badge-bg').value;
+        const fg = document.getElementById('badge-fg').value;
+        send('badge:' + n + ':' + bg + ':' + fg);
+      }
       function simulateBadge() {
         let i = 0;
-        const iv = setInterval(() => { i++; send('badge:' + i); if (i >= 12) clearInterval(iv); }, 500);
+        const iv = setInterval(() => { sendBadge(i); i++; if (i >= 12) clearInterval(iv); }, 500);
       }
 
       // Monitor visualization
