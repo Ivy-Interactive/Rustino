@@ -48,7 +48,7 @@
   <ItemGroup>
     <None Include="build/Rustino.NET.targets" Pack="true" PackagePath="build/Rustino.NET.targets" />
     <None Include="build/Rustino.NET.targets" Pack="true" PackagePath="buildTransitive/Rustino.NET.targets" />
-    <None Include="../../README.md" Pack="true" PackagePath="\" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!-- Dependencies -->
