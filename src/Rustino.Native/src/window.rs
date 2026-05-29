@@ -793,9 +793,10 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
         SetTextColor(hdc, windows::Win32::Foundation::COLORREF(0x00FFFFFF));
 
         let wide_text: Vec<u16> = text.encode_utf16().collect();
-        let nudge: i32 = 0;
+        let nudge_x: i32 = 0;
+        let nudge_y: i32 = -1;
         let mut rc = windows::Win32::Foundation::RECT {
-            left: nudge, top: 0, right: size + nudge, bottom: size,
+            left: nudge_x, top: nudge_y, right: size + nudge_x, bottom: size + nudge_y,
         };
         DrawTextW(
             hdc,

@@ -96,6 +96,8 @@ All `.Set*()`, `.Center()`, `.Load()`, and `.WaitForClose()` calls remain the sa
 | `ExecuteScript(string)` | Evaluate JavaScript in the webview |
 | `SendWebMessage(string)` | Post a message to the webview |
 | `SetZoom(double)` | Set webview zoom factor |
+| `SetBadgeCount(int?, string?, string?)` | Set taskbar/dock badge with optional bg/fg hex colors |
+| `ClearBadge()` | Remove the taskbar/dock badge |
 | `WaitForClose()` | Block until the window is closed |
 | `Dispose()` | Release native resources (`RustinoWindow` implements `IDisposable`) |
 
@@ -208,6 +210,25 @@ window.TrayIconClicked += (_, _) => window.SetVisible(true);
 // Remove tray icon
 window.RemoveTrayIcon();
 ```
+
+### Taskbar Badge
+
+Set a numeric badge on the taskbar icon (Windows) or dock icon (macOS):
+
+```csharp
+// Set badge with default colors (red background, white text)
+window.SetBadgeCount(5);
+
+// Set badge with custom colors (Windows only, hex format)
+window.SetBadgeCount(5, background: "#4A154B", foreground: "#FFFFFF");
+
+// Clear the badge
+window.ClearBadge();
+```
+
+On Windows, this renders an overlay icon on the taskbar button using a 32px anti-aliased circle with bold Segoe UI text. Numbers above 99 display as "99+". The `background` and `foreground` parameters accept `#RRGGBB` hex strings and default to `#E01E5A` (red) and `#FFFFFF` (white).
+
+On macOS, the native `dockTile.setBadgeLabel` API is used — color parameters are ignored as the OS controls badge appearance.
 
 ### Monitors
 
