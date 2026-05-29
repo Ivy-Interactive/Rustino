@@ -820,6 +820,11 @@ public class RustinoWindow : IDisposable
         var args = new PageLoadEventArgs(eventType == 0, url);
         w.PageLoaded?.Invoke(w, args);
         w._pageLoadedObs.Emit(args);
+
+        if (OperatingSystem.IsMacOS() && eventType == 1 && w._iconFile != null)
+        {
+            SetMacDockIcon(w._iconFile);
+        }
     }
 
     private static int OnNavigationNative(IntPtr ctx, IntPtr urlPtr)
@@ -960,33 +965,73 @@ public class RustinoWindow : IDisposable
         }
     }
 
+    [DllImport("libSystem.dylib")]
+    private static extern IntPtr dlopen(string path, int mode);
+
     private static void SetMacDockIcon(string iconPath)
     {
         try
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", 1);
+            }
+
             IntPtr nsImageClass = objc_getClass("NSImage");
-            if (nsImageClass == IntPtr.Zero) return;
+            if (nsImageClass == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("Failed to load NSImage class in SetMacDockIcon.");
+                return;
+            }
 
             IntPtr nsStringPath = CreateNSString(iconPath);
-            if (nsStringPath == IntPtr.Zero) return;
+            if (nsStringPath == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("Failed to create NSString for path in SetMacDockIcon.");
+                return;
+            }
 
             IntPtr allocSel = sel_registerName("alloc");
             IntPtr nsImageAllocated = objc_msgSend(nsImageClass, allocSel);
-            if (nsImageAllocated == IntPtr.Zero) return;
+            if (nsImageAllocated == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("Failed to allocate NSImage in SetMacDockIcon.");
+                return;
+            }
 
             IntPtr initSel = sel_registerName("initWithContentsOfFile:");
             IntPtr nsImage = objc_msgSend(nsImageAllocated, initSel, nsStringPath);
-            if (nsImage == IntPtr.Zero) return;
+            if (nsImage == IntPtr.Zero)
+            {
+                Console.Error.WriteLine($"Failed to init NSImage from path in SetMacDockIcon: {iconPath}");
+                return;
+            }
 
             IntPtr nsAppClass = objc_getClass("NSApplication");
-            if (nsAppClass == IntPtr.Zero) return;
+            if (nsAppClass == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("Failed to load NSApplication class in SetMacDockIcon.");
+                return;
+            }
 
             IntPtr sharedAppSel = sel_registerName("sharedApplication");
             IntPtr nsApp = objc_msgSend(nsAppClass, sharedAppSel);
-            if (nsApp == IntPtr.Zero) return;
+            if (nsApp == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("Failed to get NSApplication instance in SetMacDockIcon.");
+                return;
+            }
 
             IntPtr setIconSel = sel_registerName("setApplicationIconImage:");
             objc_msgSend(nsApp, setIconSel, nsImage);
+
+            IntPtr dockTileSel = sel_registerName("dockTile");
+            IntPtr dockTile = objc_msgSend(nsApp, dockTileSel);
+            if (dockTile != IntPtr.Zero)
+            {
+                IntPtr displaySel = sel_registerName("display");
+                objc_msgSend(dockTile, displaySel);
+            }
         }
         catch (Exception ex)
         {
