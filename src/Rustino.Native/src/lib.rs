@@ -636,20 +636,39 @@ pub unsafe extern "C" fn rustino_show_open_file_dialog(
             filters: parse_filters(filters),
             multi_select: multi_select != 0,
         };
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            init_dialog_com();
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, call directly on main thread to avoid deadlock
+            // (rfd uses dispatch_sync which would deadlock if we spawn a thread)
             let d = apply_dialog_common(rfd::FileDialog::new(), &params);
             let result = if params.multi_select {
                 d.pick_files().map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
             } else {
                 d.pick_file().map(|p| vec![p.to_string_lossy().into_owned()])
             };
-            let _ = tx.send(result);
-        });
-        let paths = rx.recv().ok()??;
-        let joined = paths.join("\n");
-        std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+            let paths = result?;
+            let joined = paths.join("\n");
+            std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                init_dialog_com();
+                let d = apply_dialog_common(rfd::FileDialog::new(), &params);
+                let result = if params.multi_select {
+                    d.pick_files().map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+                } else {
+                    d.pick_file().map(|p| vec![p.to_string_lossy().into_owned()])
+                };
+                let _ = tx.send(result);
+            });
+            let paths = rx.recv().ok()??;
+            let joined = paths.join("\n");
+            std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+        }
     })
     .ok()
     .flatten()
@@ -670,15 +689,29 @@ pub unsafe extern "C" fn rustino_show_save_file_dialog(
             filters: parse_filters(filters),
             multi_select: false,
         };
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            init_dialog_com();
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, call directly on main thread to avoid deadlock
+            // (rfd uses dispatch_sync which would deadlock if we spawn a thread)
             let d = apply_dialog_common(rfd::FileDialog::new(), &params);
             let result = d.save_file().map(|p| p.to_string_lossy().into_owned());
-            let _ = tx.send(result);
-        });
-        let path = rx.recv().ok()??;
-        std::ffi::CString::new(path).ok().map(|s| s.into_raw())
+            let path = result?;
+            std::ffi::CString::new(path).ok().map(|s| s.into_raw())
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                init_dialog_com();
+                let d = apply_dialog_common(rfd::FileDialog::new(), &params);
+                let result = d.save_file().map(|p| p.to_string_lossy().into_owned());
+                let _ = tx.send(result);
+            });
+            let path = rx.recv().ok()??;
+            std::ffi::CString::new(path).ok().map(|s| s.into_raw())
+        }
     })
     .ok()
     .flatten()
@@ -699,20 +732,39 @@ pub unsafe extern "C" fn rustino_show_select_folder_dialog(
             filters: Vec::new(),
             multi_select: multi_select != 0,
         };
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            init_dialog_com();
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, call directly on main thread to avoid deadlock
+            // (rfd uses dispatch_sync which would deadlock if we spawn a thread)
             let d = apply_dialog_common(rfd::FileDialog::new(), &params);
             let result = if params.multi_select {
                 d.pick_folders().map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
             } else {
                 d.pick_folder().map(|p| vec![p.to_string_lossy().into_owned()])
             };
-            let _ = tx.send(result);
-        });
-        let paths = rx.recv().ok()??;
-        let joined = paths.join("\n");
-        std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+            let paths = result?;
+            let joined = paths.join("\n");
+            std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                init_dialog_com();
+                let d = apply_dialog_common(rfd::FileDialog::new(), &params);
+                let result = if params.multi_select {
+                    d.pick_folders().map(|paths| paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+                } else {
+                    d.pick_folder().map(|p| vec![p.to_string_lossy().into_owned()])
+                };
+                let _ = tx.send(result);
+            });
+            let paths = rx.recv().ok()??;
+            let joined = paths.join("\n");
+            std::ffi::CString::new(joined).ok().map(|s| s.into_raw())
+        }
     })
     .ok()
     .flatten()
