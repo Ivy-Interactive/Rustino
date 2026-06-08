@@ -807,8 +807,8 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
 
         // Read text coverage from red channel (white text on black = coverage in any channel)
         let mut text_mask = vec![0u8; (size * size) as usize];
-        for i in 0..(size * size) as usize {
-            text_mask[i] = *text_pixels.add(i * 4 + 2); // R channel
+        for (i, item) in text_mask.iter_mut().enumerate().take((size * size) as usize) {
+            *item = *text_pixels.add(i * 4 + 2); // R channel
         }
 
         SelectObject(hdc, old_font);
