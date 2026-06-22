@@ -372,6 +372,7 @@ static string Html() => """
       <div class="tab" data-tab="badges">Badges</div>
       <div class="tab" data-tab="monitors">Monitors</div>
       <div class="tab" data-tab="reactive">Reactive</div>
+      <div class="tab" data-tab="voice">Voice Test</div>
     </div>
 
     <div class="panels">
@@ -577,6 +578,18 @@ static string Html() => """
           </ul>
         </div>
       </div>
+
+      <!-- VOICE -->
+      <div class="panel" id="tab-voice">
+        <h2>Voice Input / mediaDevices Test</h2>
+        <div class="card">
+          <h3>Request Microphone Access</h3>
+          <div class="row">
+            <button class="b" onclick="testMic()">Test getUserMedia</button>
+          </div>
+          <p id="mic-status" style="margin-top:12px;color:#888;font-size:0.85rem">Click the button to request microphone access.</p>
+        </div>
+      </div>
     </div>
 
     <!-- Log panel -->
@@ -648,6 +661,32 @@ static string Html() => """
 
       // Auto-refresh monitors on tab switch
       document.querySelector('[data-tab="monitors"]').addEventListener('click', () => send('get-monitors'));
+
+      async function testMic() {
+        const statusEl = document.getElementById('mic-status');
+        statusEl.textContent = 'Checking navigator.mediaDevices...';
+        statusEl.style.color = '#ffd93d';
+        try {
+          if (!navigator.mediaDevices) {
+            statusEl.textContent = 'Error: navigator.mediaDevices is undefined (Not Secure Context?)';
+            statusEl.style.color = '#ff6b6b';
+            return;
+          }
+          if (!navigator.mediaDevices.getUserMedia) {
+            statusEl.textContent = 'Error: navigator.mediaDevices.getUserMedia is undefined';
+            statusEl.style.color = '#ff6b6b';
+            return;
+          }
+          statusEl.textContent = 'Requesting mic permission...';
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          statusEl.textContent = 'Access GRANTED! Stream active: ' + stream.active;
+          statusEl.style.color = '#4ecdc4';
+          stream.getTracks().forEach(t => t.stop());
+        } catch (e) {
+          statusEl.textContent = 'Error: ' + e.name + ' - ' + e.message;
+          statusEl.style.color = '#ff6b6b';
+        }
+      }
     </script>
     </body>
     </html>
