@@ -684,6 +684,7 @@ fn init_dialog_com() {
 }
 
 #[cfg(not(target_os = "windows"))]
+#[allow(dead_code)]
 fn init_dialog_com() {}
 
 #[unsafe(no_mangle)]

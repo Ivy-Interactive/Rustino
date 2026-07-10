@@ -249,21 +249,24 @@ impl RustinoWindow {
             }));
         }
 
-        let mut current_menu: Option<muda::Menu> = None;
-        let mut tray: Option<tray_icon::TrayIcon> = None;
-
         #[cfg(target_os = "macos")]
-        {
+        let mut current_menu: Option<muda::Menu> = {
             let default_menu = create_default_macos_menu(&config);
             attach_menu_to_window(&default_menu, &window);
-            current_menu = Some(default_menu);
-        }
+            Some(default_menu)
+        };
+
+        #[cfg(not(target_os = "macos"))]
+        let mut current_menu: Option<muda::Menu> = None;
+
+        let mut tray: Option<tray_icon::TrayIcon> = None;
 
         event_loop.run_return(move |event, _, control_flow| {
             if *control_flow != ControlFlow::Exit {
                 *control_flow = ControlFlow::Wait;
             }
 
+            #[allow(clippy::collapsible_match)]
             match event {
                 Event::UserEvent(cmd) => {
                     if dispatch_command(
@@ -673,7 +676,7 @@ fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = menu.init_for_nsapp();
+        menu.init_for_nsapp();
     }
     #[cfg(target_os = "linux")]
     {
@@ -690,7 +693,7 @@ fn remove_menu_from_window(menu: &muda::Menu, _window: &tao::window::Window) {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = menu.remove_for_nsapp();
+        menu.remove_for_nsapp();
     }
     #[cfg(target_os = "linux")]
     {
