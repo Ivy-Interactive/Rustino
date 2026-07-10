@@ -44,6 +44,15 @@ public class RustinoWindow : IDisposable
     private bool _zoomHotkeys;
     private readonly List<string> _initScripts = new();
 
+    // About metadata fields
+    private string? _aboutName;
+    private string? _aboutVersion;
+    private string? _aboutCopyright;
+    private string? _aboutWebsite;
+    private string? _aboutLicense;
+    private readonly List<string> _aboutAuthors = new();
+    private string? _aboutComments;
+
     // Observable streams for reactive consumers
     private readonly EventObservable<(int Width, int Height)> _sizeChangedObs = new();
     private readonly EventObservable<(int X, int Y)> _locationChangedObs = new();
@@ -337,6 +346,65 @@ public class RustinoWindow : IDisposable
     public RustinoWindow AddInitScript(string script)
     {
         _initScripts.Add(script);
+        return this;
+    }
+
+    public RustinoWindow SetAboutName(string name)
+    {
+        _aboutName = name;
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_about_name(_nativeHandle, name);
+        return this;
+    }
+
+    public RustinoWindow SetAboutVersion(string version)
+    {
+        _aboutVersion = version;
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_about_version(_nativeHandle, version);
+        return this;
+    }
+
+    public RustinoWindow SetAboutCopyright(string copyright)
+    {
+        _aboutCopyright = copyright;
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_about_copyright(_nativeHandle, copyright);
+        return this;
+    }
+
+    public RustinoWindow SetAboutWebsite(string website)
+    {
+        _aboutWebsite = website;
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_about_website(_nativeHandle, website);
+        return this;
+    }
+
+    public RustinoWindow SetAboutLicense(string license)
+    {
+        _aboutLicense = license;
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_about_license(_nativeHandle, license);
+        return this;
+    }
+
+    public RustinoWindow AddAboutAuthor(string author)
+    {
+        _aboutAuthors.Add(author);
+        if (_nativeHandle != IntPtr.Zero)
+        {
+            var authorsStr = string.Join("\n", _aboutAuthors);
+            RustinoDllImports.rustino_set_about_authors(_nativeHandle, authorsStr);
+        }
+        return this;
+    }
+
+    public RustinoWindow SetAboutComments(string comments)
+    {
+        _aboutComments = comments;
+        if (_nativeHandle != IntPtr.Zero)
+            RustinoDllImports.rustino_set_about_comments(_nativeHandle, comments);
         return this;
     }
 
@@ -648,6 +716,13 @@ public class RustinoWindow : IDisposable
 
         var titlePtr = Marshal.StringToCoTaskMemUTF8(_title);
         var iconPtr = _iconFile != null ? Marshal.StringToCoTaskMemUTF8(_iconFile) : IntPtr.Zero;
+        var aboutNamePtr = _aboutName != null ? Marshal.StringToCoTaskMemUTF8(_aboutName) : IntPtr.Zero;
+        var aboutVersionPtr = _aboutVersion != null ? Marshal.StringToCoTaskMemUTF8(_aboutVersion) : IntPtr.Zero;
+        var aboutCopyrightPtr = _aboutCopyright != null ? Marshal.StringToCoTaskMemUTF8(_aboutCopyright) : IntPtr.Zero;
+        var aboutWebsitePtr = _aboutWebsite != null ? Marshal.StringToCoTaskMemUTF8(_aboutWebsite) : IntPtr.Zero;
+        var aboutLicensePtr = _aboutLicense != null ? Marshal.StringToCoTaskMemUTF8(_aboutLicense) : IntPtr.Zero;
+        var aboutAuthorsPtr = _aboutAuthors.Count > 0 ? Marshal.StringToCoTaskMemUTF8(string.Join("\n", _aboutAuthors)) : IntPtr.Zero;
+        var aboutCommentsPtr = _aboutComments != null ? Marshal.StringToCoTaskMemUTF8(_aboutComments) : IntPtr.Zero;
 
         // Setup logging callback if ILogger is provided
         IntPtr logCallbackPtr = IntPtr.Zero;
@@ -680,6 +755,13 @@ public class RustinoWindow : IDisposable
                 LogVerbosity = LogVerbosity,
                 LogCallback = logCallbackPtr,
                 LogContext = logContextPtr,
+                AboutName = aboutNamePtr,
+                AboutVersion = aboutVersionPtr,
+                AboutCopyright = aboutCopyrightPtr,
+                AboutWebsite = aboutWebsitePtr,
+                AboutLicense = aboutLicensePtr,
+                AboutAuthors = aboutAuthorsPtr,
+                AboutComments = aboutCommentsPtr,
             };
 
             _nativeHandle = RustinoDllImports.rustino_ctor(ref parameters);
@@ -691,6 +773,13 @@ public class RustinoWindow : IDisposable
         {
             Marshal.FreeCoTaskMem(titlePtr);
             if (iconPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(iconPtr);
+            if (aboutNamePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutNamePtr);
+            if (aboutVersionPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutVersionPtr);
+            if (aboutCopyrightPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutCopyrightPtr);
+            if (aboutWebsitePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutWebsitePtr);
+            if (aboutLicensePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutLicensePtr);
+            if (aboutAuthorsPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutAuthorsPtr);
+            if (aboutCommentsPtr != IntPtr.Zero) Marshal.FreeCoTaskMem(aboutCommentsPtr);
         }
 
         try
