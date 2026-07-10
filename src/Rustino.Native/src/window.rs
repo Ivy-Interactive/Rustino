@@ -249,21 +249,24 @@ impl RustinoWindow {
             }));
         }
 
-        let mut current_menu: Option<muda::Menu> = None;
-        let mut tray: Option<tray_icon::TrayIcon> = None;
-
         #[cfg(target_os = "macos")]
-        {
-            let default_menu = create_default_macos_menu();
+        let mut current_menu: Option<muda::Menu> = {
+            let default_menu = create_default_macos_menu(&config);
             attach_menu_to_window(&default_menu, &window);
-            current_menu = Some(default_menu);
-        }
+            Some(default_menu)
+        };
+
+        #[cfg(not(target_os = "macos"))]
+        let mut current_menu: Option<muda::Menu> = None;
+
+        let mut tray: Option<tray_icon::TrayIcon> = None;
 
         event_loop.run_return(move |event, _, control_flow| {
             if *control_flow != ControlFlow::Exit {
                 *control_flow = ControlFlow::Wait;
             }
 
+            #[allow(clippy::collapsible_match)]
             match event {
                 Event::UserEvent(cmd) => {
                     if dispatch_command(
@@ -622,11 +625,32 @@ fn dispatch_command(
 // --- Menu platform helpers ---
 
 #[cfg(target_os = "macos")]
-pub(crate) fn create_default_macos_menu() -> muda::Menu {
+pub(crate) fn create_default_macos_menu(config: &crate::config::WindowConfig) -> muda::Menu {
     let default_menu = muda::Menu::new();
-    
+
     let app_menu = muda::Submenu::new("App", true);
-    let _ = app_menu.append(&muda::PredefinedMenuItem::about(None, None));
+
+    let metadata = muda::AboutMetadata {
+        name: config.about_name.clone().or_else(|| Some(config.title.clone())),
+        version: config.about_version.clone(),
+        copyright: config.about_copyright.clone(),
+        website: config.about_website.clone(),
+        license: config.about_license.clone(),
+        authors: if config.about_authors.is_empty() {
+            None
+        } else {
+            Some(config.about_authors.clone())
+        },
+        comments: config.about_comments.clone(),
+        ..Default::default()
+    };
+
+    let menu_label = config.about_name.as_deref().unwrap_or(&config.title);
+    let _ = app_menu.append(&muda::PredefinedMenuItem::about(
+        Some(&format!("About {menu_label}")),
+        Some(metadata),
+    ));
+
     let _ = app_menu.append(&muda::PredefinedMenuItem::separator());
     let _ = app_menu.append(&muda::PredefinedMenuItem::quit(None));
     let _ = default_menu.append(&app_menu);
@@ -652,7 +676,7 @@ fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = menu.init_for_nsapp();
+        menu.init_for_nsapp();
     }
     #[cfg(target_os = "linux")]
     {
@@ -669,7 +693,7 @@ fn remove_menu_from_window(menu: &muda::Menu, _window: &tao::window::Window) {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = menu.remove_for_nsapp();
+        menu.remove_for_nsapp();
     }
     #[cfg(target_os = "linux")]
     {
@@ -965,7 +989,27 @@ mod tests {
     #[ignore = "muda::Menu can only be created on the main thread on macOS"]
     #[cfg(target_os = "macos")]
     fn test_create_default_macos_menu() {
-        let menu = super::create_default_macos_menu();
+        let mut config = crate::config::WindowConfig::default();
+        config.title = "Test App".to_string();
+        let menu = super::create_default_macos_menu(&config);
+        let items = menu.items();
+        assert_eq!(items.len(), 2, "Menu should have exactly 2 submenus (App and Edit)");
+    }
+
+    #[test]
+    #[ignore = "muda::Menu can only be created on the main thread on macOS"]
+    #[cfg(target_os = "macos")]
+    fn test_create_default_macos_menu_with_about_metadata() {
+        let mut config = crate::config::WindowConfig::default();
+        config.title = "Test App".to_string();
+        config.about_name = Some("Custom App Name".to_string());
+        config.about_version = Some("1.2.3".to_string());
+        config.about_copyright = Some("© 2026 Test Corp".to_string());
+        config.about_website = Some("https://test.com".to_string());
+        config.about_license = Some("MIT".to_string());
+        config.about_authors = vec!["Alice".to_string(), "Bob".to_string()];
+        config.about_comments = Some("A test application".to_string());
+        let menu = super::create_default_macos_menu(&config);
         let items = menu.items();
         assert_eq!(items.len(), 2, "Menu should have exactly 2 submenus (App and Edit)");
     }

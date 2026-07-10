@@ -185,6 +185,71 @@ pub unsafe extern "C" fn rustino_center(instance: *mut RustinoWindow) {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_name(instance: *mut RustinoWindow, name: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_name = unsafe { util::cstr_to_string(name) };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_version(instance: *mut RustinoWindow, version: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_version = unsafe { util::cstr_to_string(version) };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_copyright(instance: *mut RustinoWindow, copyright: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_copyright = unsafe { util::cstr_to_string(copyright) };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_website(instance: *mut RustinoWindow, website: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_website = unsafe { util::cstr_to_string(website) };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_license(instance: *mut RustinoWindow, license: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_license = unsafe { util::cstr_to_string(license) };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_authors(instance: *mut RustinoWindow, authors: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_authors = unsafe { util::cstr_to_string(authors) }
+                .map(|s| s.lines().map(|l| l.to_string()).collect())
+                .unwrap_or_default();
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rustino_set_about_comments(instance: *mut RustinoWindow, comments: *const c_char) {
+    let _ = catch_unwind(|| {
+        if let Some(inst) = unsafe { instance.as_mut() } {
+            inst.config.about_comments = unsafe { util::cstr_to_string(comments) };
+        }
+    });
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rustino_navigate_to_url(instance: *mut RustinoWindow, url: *const c_char) {
     let _ = catch_unwind(|| {
         if let Some(inst) = unsafe { instance.as_mut() } {
@@ -619,6 +684,7 @@ fn init_dialog_com() {
 }
 
 #[cfg(not(target_os = "windows"))]
+#[allow(dead_code)]
 fn init_dialog_com() {}
 
 #[unsafe(no_mangle)]
