@@ -1133,7 +1133,7 @@ public class RustinoWindow : IDisposable
         var processPath = Environment.ProcessPath ?? string.Empty;
         if (processPath.Contains(".dotnet") && (processPath.Contains("tools") || processPath.Contains("store")))
             return true;
-        
+
         var argv0 = Environment.GetCommandLineArgs().FirstOrDefault() ?? string.Empty;
         if (argv0.Contains(".dotnet") && (argv0.Contains("tools") || argv0.Contains("store")))
             return true;
