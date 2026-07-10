@@ -19,6 +19,13 @@ pub struct RustinoInitParams {
     pub log_verbosity: i32,
     pub log_callback: Option<LogCallback>,
     pub log_context: *const c_void,
+    pub about_name: *const c_char,
+    pub about_version: *const c_char,
+    pub about_copyright: *const c_char,
+    pub about_website: *const c_char,
+    pub about_license: *const c_char,
+    pub about_authors: *const c_char,
+    pub about_comments: *const c_char,
 }
 
 pub struct WindowConfig {
@@ -54,6 +61,14 @@ pub struct WindowConfig {
     pub media_autoplay: bool,
     pub zoom_hotkeys: bool,
     pub initialization_scripts: Vec<String>,
+
+    pub about_name: Option<String>,
+    pub about_version: Option<String>,
+    pub about_copyright: Option<String>,
+    pub about_website: Option<String>,
+    pub about_license: Option<String>,
+    pub about_authors: Vec<String>,
+    pub about_comments: Option<String>,
 }
 
 impl Default for WindowConfig {
@@ -90,6 +105,13 @@ impl Default for WindowConfig {
             media_autoplay: true,
             zoom_hotkeys: false,
             initialization_scripts: Vec::new(),
+            about_name: None,
+            about_version: None,
+            about_copyright: None,
+            about_website: None,
+            about_license: None,
+            about_authors: Vec::new(),
+            about_comments: None,
         }
     }
 }
@@ -117,6 +139,15 @@ impl WindowConfig {
             log_verbosity: params.log_verbosity,
             log_callback: params.log_callback,
             log_context: params.log_context,
+            about_name: unsafe { cstr_to_string(params.about_name) },
+            about_version: unsafe { cstr_to_string(params.about_version) },
+            about_copyright: unsafe { cstr_to_string(params.about_copyright) },
+            about_website: unsafe { cstr_to_string(params.about_website) },
+            about_license: unsafe { cstr_to_string(params.about_license) },
+            about_authors: unsafe { cstr_to_string(params.about_authors) }
+                .map(|s| s.lines().map(|l| l.to_string()).collect())
+                .unwrap_or_default(),
+            about_comments: unsafe { cstr_to_string(params.about_comments) },
             ..Default::default()
         }
     }
@@ -154,6 +185,13 @@ mod tests {
             log_verbosity: 2,
             log_callback: None,
             log_context: std::ptr::null(),
+            about_name: std::ptr::null(),
+            about_version: std::ptr::null(),
+            about_copyright: std::ptr::null(),
+            about_website: std::ptr::null(),
+            about_license: std::ptr::null(),
+            about_authors: std::ptr::null(),
+            about_comments: std::ptr::null(),
         };
         (params, keep)
     }
@@ -223,5 +261,63 @@ mod tests {
         assert!(config.decorations);
         assert!(config.visible);
         assert!(config.media_autoplay);
+    }
+
+    #[test]
+    fn from_params_parses_about_metadata() {
+        let name = CString::new("Test App").unwrap();
+        let version = CString::new("1.2.3").unwrap();
+        let copyright = CString::new("© 2026 Test Corp").unwrap();
+        let website = CString::new("https://test.com").unwrap();
+        let license = CString::new("MIT").unwrap();
+        let authors = CString::new("Alice\nBob\nCharlie").unwrap();
+        let comments = CString::new("A test application").unwrap();
+
+        let params = RustinoInitParams {
+            title: name.as_ptr(),
+            icon_file: std::ptr::null(),
+            width: 800,
+            height: 600,
+            center_on_initialize: 0,
+            use_os_default_size: 0,
+            resizable: 1,
+            topmost: 0,
+            devtools_enabled: 0,
+            clipboard_enabled: 0,
+            ignore_certificate_errors: 0,
+            web_security_enabled: 1,
+            log_verbosity: 0,
+            log_callback: None,
+            log_context: std::ptr::null(),
+            about_name: name.as_ptr(),
+            about_version: version.as_ptr(),
+            about_copyright: copyright.as_ptr(),
+            about_website: website.as_ptr(),
+            about_license: license.as_ptr(),
+            about_authors: authors.as_ptr(),
+            about_comments: comments.as_ptr(),
+        };
+
+        let config = WindowConfig::from_params(&params);
+        assert_eq!(config.about_name.as_deref(), Some("Test App"));
+        assert_eq!(config.about_version.as_deref(), Some("1.2.3"));
+        assert_eq!(config.about_copyright.as_deref(), Some("© 2026 Test Corp"));
+        assert_eq!(config.about_website.as_deref(), Some("https://test.com"));
+        assert_eq!(config.about_license.as_deref(), Some("MIT"));
+        assert_eq!(config.about_authors, vec!["Alice", "Bob", "Charlie"]);
+        assert_eq!(config.about_comments.as_deref(), Some("A test application"));
+    }
+
+    #[test]
+    fn from_params_null_about_fields_are_none() {
+        let (params, _keep) = make_params(Some("Test"));
+        let config = WindowConfig::from_params(&params);
+        assert!(config.about_name.is_none());
+        assert!(config.about_version.is_none());
+        assert!(config.about_copyright.is_none());
+        assert!(config.about_website.is_none());
+        assert!(config.about_license.is_none());
+        assert!(config.about_authors.is_empty());
+        assert!(config.about_comments.is_none());
     }
 }

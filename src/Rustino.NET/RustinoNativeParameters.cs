@@ -20,4 +20,11 @@ internal struct RustinoNativeParameters
     public int LogVerbosity;
     public IntPtr LogCallback;
     public IntPtr LogContext;
+    public IntPtr AboutName;
+    public IntPtr AboutVersion;
+    public IntPtr AboutCopyright;
+    public IntPtr AboutWebsite;
+    public IntPtr AboutLicense;
+    public IntPtr AboutAuthors;
+    public IntPtr AboutComments;
 }

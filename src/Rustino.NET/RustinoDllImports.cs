@@ -82,6 +82,41 @@ internal static class RustinoDllImports
     internal static extern void rustino_center(IntPtr instance);
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_name(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_version(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string version);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_copyright(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string copyright);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_website(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string website);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_license(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string license);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_authors(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string authors);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void rustino_set_about_comments(
+        IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string comments);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
     internal static extern void rustino_navigate_to_url(
         IntPtr instance,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string url);
