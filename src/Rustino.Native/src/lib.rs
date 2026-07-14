@@ -98,11 +98,72 @@ pub unsafe extern "C" fn rustino_show_notification(
         if let Some(id) = unsafe { util::cstr_to_string(app_id) } {
             n.app_id(&id);
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        {
+            let requested = unsafe { util::cstr_to_string(app_id) };
+            macos_notification::ensure_application_set(requested.as_deref());
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         let _ = app_id;
         if n.show().is_ok() { 1 } else { 0 }
     })
     .unwrap_or(0)
+}
+
+// notify-rust's macOS backend lazily calls `set_application("use_default")` on the
+// first notification if nobody has set one, which makes macOS pop a "Where is
+// use_default?" app-picker dialog (see Ivy-Tendril#1682). We must call
+// `notify_rust::set_application` ourselves before that happens — and since its
+// internal `Once` latches even on failure, it can only ever be called once, with
+// an id we already know is valid.
+#[cfg(target_os = "macos")]
+mod macos_notification {
+    use objc2_app_kit::NSWorkspace;
+    use objc2_foundation::{NSBundle, NSString};
+    use std::sync::Once;
+
+    static ENSURE_APPLICATION_SET: Once = Once::new();
+
+    /// Picks a LaunchServices-registered bundle id and calls `notify_rust::set_application`
+    /// with it exactly once. Must be called before the first `Notification::show()`.
+    pub fn ensure_application_set(requested_app_id: Option<&str>) {
+        ENSURE_APPLICATION_SET.call_once(|| {
+            let bundle_id = pick_bundle_id(requested_app_id);
+            let _ = notify_rust::set_application(&bundle_id);
+        });
+    }
+
+    /// Returns the first candidate that is actually registered with LaunchServices,
+    /// falling back to "com.apple.Finder" (guaranteed installed; notify-rust's own
+    /// eventual default) if nothing else resolves.
+    fn pick_bundle_id(requested_app_id: Option<&str>) -> String {
+        let main_bundle_id = main_bundle_identifier();
+        let candidates = [
+            requested_app_id,
+            main_bundle_id.as_deref(),
+            Some("com.apple.Terminal"),
+        ];
+        candidates
+            .into_iter()
+            .flatten()
+            .find(|id| !id.is_empty() && is_registered_bundle_id(id))
+            .map(str::to_string)
+            .unwrap_or_else(|| "com.apple.Finder".to_string())
+    }
+
+    /// The running app's own bundle identifier, when running inside a real .app bundle.
+    fn main_bundle_identifier() -> Option<String> {
+        NSBundle::mainBundle().bundleIdentifier().map(|s| s.to_string())
+    }
+
+    /// LaunchServices only accepts bundle ids it knows about; `setApplication` silently
+    /// rejects anything else, so we pre-validate via the same lookup it uses internally
+    /// (`LSCopyApplicationURLsForBundleIdentifier`, exposed here as `URLForApplication...`).
+    fn is_registered_bundle_id(bundle_id: &str) -> bool {
+        let workspace = NSWorkspace::sharedWorkspace();
+        let id = NSString::from_str(bundle_id);
+        workspace.URLForApplicationWithBundleIdentifier(&id).is_some()
+    }
 }
 
 // ---------------------------------------------------------------------------
