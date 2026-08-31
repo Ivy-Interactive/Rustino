@@ -8,13 +8,21 @@ use tao::dpi::{PhysicalPosition, PhysicalSize};
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 use tao::platform::run_return::EventLoopExtRunReturn;
-use tao::window::WindowBuilder;
+
+#[cfg(target_os = "linux")]
+use tao::platform::unix::WindowExtUnix;
+
 #[cfg(target_os = "windows")]
 use tao::platform::windows::EventLoopBuilderExtWindows;
+
+use tao::window::WindowBuilder;
 use wry::WebViewBuilder;
 
 #[cfg(target_os = "windows")]
 use std::sync::Mutex as StdMutex;
+
+#[cfg(target_os = "linux")]
+use wry::WebViewBuilderExtUnix;
 
 use crate::callbacks::RustinoCallbacks;
 use crate::commands::RustinoCommand;
@@ -158,21 +166,21 @@ impl RustinoWindow {
         // IPC handler: JS → Rust
         let ctx = callbacks.context;
         if let Some(cb) = callbacks.on_web_message {
-            webview_builder = webview_builder.with_ipc_handler(move |req: wry::http::Request<String>| {
-                if let Ok(cstr) = CString::new(req.into_body()) {
-                    unsafe { cb(ctx, cstr.as_ptr()) };
-                }
-            });
+            webview_builder =
+                webview_builder.with_ipc_handler(move |req: wry::http::Request<String>| {
+                    if let Ok(cstr) = CString::new(req.into_body()) {
+                        unsafe { cb(ctx, cstr.as_ptr()) };
+                    }
+                });
         }
 
         // Navigation handler
         if let Some(cb) = callbacks.on_navigation {
-            webview_builder = webview_builder.with_navigation_handler(move |url| {
-                match CString::new(url) {
+            webview_builder =
+                webview_builder.with_navigation_handler(move |url| match CString::new(url) {
                     Ok(cstr) => unsafe { cb(ctx, cstr.as_ptr()) == 0 },
                     Err(_) => true,
-                }
-            });
+                });
 
             webview_builder = webview_builder.with_new_window_req_handler(move |url, _features| {
                 handle_new_window_req(url, ctx, cb)
@@ -181,16 +189,15 @@ impl RustinoWindow {
 
         // Page load handler
         if let Some(cb) = callbacks.on_page_load {
-            webview_builder =
-                webview_builder.with_on_page_load_handler(move |event, url| {
-                    let event_code = match event {
-                        wry::PageLoadEvent::Started => 0,
-                        wry::PageLoadEvent::Finished => 1,
-                    };
-                    if let Ok(cstr) = CString::new(url) {
-                        unsafe { cb(ctx, event_code, cstr.as_ptr()) };
-                    }
-                });
+            webview_builder = webview_builder.with_on_page_load_handler(move |event, url| {
+                let event_code = match event {
+                    wry::PageLoadEvent::Started => 0,
+                    wry::PageLoadEvent::Finished => 1,
+                };
+                if let Ok(cstr) = CString::new(url) {
+                    unsafe { cb(ctx, event_code, cstr.as_ptr()) };
+                }
+            });
         }
 
         if let Some(ref url) = config.start_url {
@@ -199,6 +206,13 @@ impl RustinoWindow {
             webview_builder = webview_builder.with_html(html);
         }
 
+        // Use GTK to support wayland
+        #[cfg(target_os = "linux")]
+        let webview = webview_builder
+            .build_gtk(window.default_vbox().expect("failed to get default vbox"))
+            .expect("failed to build webview");
+
+        #[cfg(not(target_os = "linux"))]
         let webview = webview_builder
             .build(&window)
             .expect("failed to build webview");
@@ -283,7 +297,8 @@ impl RustinoWindow {
                     }
                 }
                 Event::WindowEvent {
-                    event: ref win_event, ..
+                    event: ref win_event,
+                    ..
                 } => {
                     match win_event {
                         WindowEvent::CloseRequested => {
@@ -315,9 +330,7 @@ impl RustinoWindow {
                         WindowEvent::Focused(focused) => {
                             state.is_focused.store(*focused, Ordering::Release);
                             if let Some(cb) = callbacks.on_focus_changed {
-                                unsafe {
-                                    cb(callbacks.context, if *focused { 1 } else { 0 })
-                                };
+                                unsafe { cb(callbacks.context, if *focused { 1 } else { 0 }) };
                             }
                         }
                         WindowEvent::KeyboardInput { .. } => {
@@ -357,10 +370,16 @@ fn configure_webview2_args(config: &WindowConfig) {
     #[cfg(not(target_os = "windows"))]
     {
         if !config.web_security_enabled {
-            log_warning(config, "[rustino] Warning: SetWebSecurityEnabled(false) is only supported on Windows (WebView2). Ignored on this platform.");
+            log_warning(
+                config,
+                "[rustino] Warning: SetWebSecurityEnabled(false) is only supported on Windows (WebView2). Ignored on this platform.",
+            );
         }
         if config.ignore_certificate_errors {
-            log_warning(config, "[rustino] Warning: SetIgnoreCertificateErrorsEnabled(true) is only supported on Windows (WebView2). Ignored on this platform.");
+            log_warning(
+                config,
+                "[rustino] Warning: SetIgnoreCertificateErrorsEnabled(true) is only supported on Windows (WebView2). Ignored on this platform.",
+            );
         }
     }
 }
@@ -381,8 +400,7 @@ fn log_warning(config: &WindowConfig, message: &str) {
 fn append_webview2_arg(arg: &str) {
     static LOCK: StdMutex<()> = StdMutex::new(());
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let existing =
-        std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+    let existing = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
     if !existing.contains(arg) {
         let new_val = if existing.is_empty() {
             arg.to_string()
@@ -413,9 +431,9 @@ fn update_monitor_cache(window: &tao::window::Window, state: &SharedState) {
         .map(|m| {
             let pos = m.position();
             let size = m.size();
-            let is_primary = primary
-                .as_ref()
-                .map_or(false, |p| p.name() == m.name() && p.position() == m.position());
+            let is_primary = primary.as_ref().map_or(false, |p| {
+                p.name() == m.name() && p.position() == m.position()
+            });
             serde_json::json!({
                 "name": m.name(),
                 "x": pos.x,
@@ -432,9 +450,9 @@ fn update_monitor_cache(window: &tao::window::Window, state: &SharedState) {
     let current_json = if let Some(m) = window.current_monitor() {
         let pos = m.position();
         let size = m.size();
-        let is_primary = primary
-            .as_ref()
-            .map_or(false, |p| p.name() == m.name() && p.position() == m.position());
+        let is_primary = primary.as_ref().map_or(false, |p| {
+            p.name() == m.name() && p.position() == m.position()
+        });
         serde_json::to_string(&serde_json::json!({
             "name": m.name(),
             "x": pos.x,
@@ -528,9 +546,8 @@ fn dispatch_command(
                     _ => escaped.push(ch),
                 }
             }
-            let js = format!(
-                "window.dispatchEvent(new MessageEvent('message',{{data:'{escaped}'}}));"
-            );
+            let js =
+                format!("window.dispatchEvent(new MessageEvent('message',{{data:'{escaped}'}}));");
             let _ = webview.evaluate_script(&js);
         }
         RustinoCommand::LoadUrl(url) => {
@@ -545,7 +562,15 @@ fn dispatch_command(
         RustinoCommand::SetBackgroundColor(r, g, b, a) => {
             let _ = webview.set_background_color((r, g, b, a));
         }
-        RustinoCommand::SetBadgeCount { count, bg_r, bg_g, bg_b, fg_r, fg_g, fg_b } => {
+        RustinoCommand::SetBadgeCount {
+            count,
+            bg_r,
+            bg_g,
+            bg_b,
+            fg_r,
+            fg_g,
+            fg_b,
+        } => {
             set_badge_count(window, count, [bg_r, bg_g, bg_b], [fg_r, fg_g, fg_b]);
         }
         RustinoCommand::SetMenu(json) => {
@@ -606,9 +631,9 @@ fn dispatch_command(
                 unsafe { cb(callbacks.context) };
             }
         }
-        RustinoCommand::ShowOpenFileDialog(..) |
-        RustinoCommand::ShowSaveFileDialog(..) |
-        RustinoCommand::ShowSelectFolderDialog(..) => {}
+        RustinoCommand::ShowOpenFileDialog(..)
+        | RustinoCommand::ShowSaveFileDialog(..)
+        | RustinoCommand::ShowSelectFolderDialog(..) => {}
         RustinoCommand::GetMonitors(tx) => {
             update_monitor_cache(window, state);
             let _ = tx.send(state.load_monitors());
@@ -631,7 +656,10 @@ pub(crate) fn create_default_macos_menu(config: &crate::config::WindowConfig) ->
     let app_menu = muda::Submenu::new("App", true);
 
     let metadata = muda::AboutMetadata {
-        name: config.about_name.clone().or_else(|| Some(config.title.clone())),
+        name: config
+            .about_name
+            .clone()
+            .or_else(|| Some(config.title.clone())),
         version: config.about_version.clone(),
         copyright: config.about_copyright.clone(),
         website: config.about_website.clone(),
@@ -672,7 +700,9 @@ fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
-        unsafe { let _ = menu.init_for_hwnd(_window.hwnd() as _); }
+        unsafe {
+            let _ = menu.init_for_hwnd(_window.hwnd() as _);
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -681,7 +711,10 @@ fn attach_menu_to_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "linux")]
     {
         use tao::platform::unix::WindowExtUnix;
-        let _ = menu.init_for_gtk_window(_window.gtk_window(), None::<&gtk::Container>);
+
+        if let Some(container) = _window.default_vbox() {
+            let _ = menu.init_for_gtk_window(_window.gtk_window(), Some(container));
+        }
     }
 }
 
@@ -689,7 +722,9 @@ fn remove_menu_from_window(menu: &muda::Menu, _window: &tao::window::Window) {
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
-        unsafe { let _ = menu.remove_for_hwnd(_window.hwnd() as _); }
+        unsafe {
+            let _ = menu.remove_for_hwnd(_window.hwnd() as _);
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -702,13 +737,11 @@ fn remove_menu_from_window(menu: &muda::Menu, _window: &tao::window::Window) {
     }
 }
 
-fn show_context_menu(
-    menu: &muda::Menu,
-    window: &tao::window::Window,
-    pos: Option<(f64, f64)>,
-) {
+fn show_context_menu(menu: &muda::Menu, window: &tao::window::Window, pos: Option<(f64, f64)>) {
     use muda::ContextMenu;
-    let position = pos.map(|(x, y)| muda::dpi::Position::Physical(muda::dpi::PhysicalPosition::new(x as i32, y as i32)));
+    let position = pos.map(|(x, y)| {
+        muda::dpi::Position::Physical(muda::dpi::PhysicalPosition::new(x as i32, y as i32))
+    });
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
@@ -721,9 +754,12 @@ fn show_context_menu(
     }
     #[cfg(target_os = "linux")]
     {
-        use tao::platform::unix::WindowExtUnix;
         use gtk::prelude::Cast;
-        let _ = menu.show_context_menu_for_gtk_window(window.gtk_window().upcast_ref::<gtk::Window>(), position);
+        use tao::platform::unix::WindowExtUnix;
+        let _ = menu.show_context_menu_for_gtk_window(
+            window.gtk_window().upcast_ref::<gtk::Window>(),
+            position,
+        );
     }
 }
 
@@ -741,12 +777,17 @@ fn set_badge_count(_window: &tao::window::Window, count: Option<u32>, _bg: [u8; 
 }
 
 #[cfg(target_os = "windows")]
-fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>, bg: [u8; 3], fg: [u8; 3]) {
+fn set_badge_count_windows(
+    window: &tao::window::Window,
+    count: Option<u32>,
+    bg: [u8; 3],
+    fg: [u8; 3],
+) {
     use tao::platform::windows::WindowExtWindows;
-    use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList};
-    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
-    use windows::Win32::UI::WindowsAndMessaging::*;
     use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance};
+    use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList};
+    use windows::Win32::UI::WindowsAndMessaging::*;
 
     unsafe {
         let Ok(taskbar): Result<ITaskbarList3, _> =
@@ -772,9 +813,13 @@ fn set_badge_count_windows(window: &tao::window::Window, count: Option<u32>, bg:
 }
 
 #[cfg(target_os = "windows")]
-fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
-    use windows::Win32::UI::WindowsAndMessaging::*;
+fn create_badge_icon(
+    count: u32,
+    bg: [u8; 3],
+    fg: [u8; 3],
+) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
     use windows::Win32::Graphics::Gdi::*;
+    use windows::Win32::UI::WindowsAndMessaging::*;
     use windows::core::w;
 
     let size: i32 = 32;
@@ -793,18 +838,34 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
 
         // --- Pass 1: Render white text on black to get coverage mask ---
         let mut text_bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let text_bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut text_bits, None, 0).ok()?;
+        let text_bmp =
+            CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut text_bits, None, 0).ok()?;
         let old_bmp = SelectObject(hdc, text_bmp.into());
 
         let text_pixels = text_bits as *mut u8;
         std::ptr::write_bytes(text_pixels, 0, (size * size * 4) as usize);
 
-        let text = if count > 99 { "99+".to_string() } else { count.to_string() };
-        let font_size = if text.len() <= 1 { 22 } else if text.len() == 2 { 18 } else { 14 };
+        let text = if count > 99 {
+            "99+".to_string()
+        } else {
+            count.to_string()
+        };
+        let font_size = if text.len() <= 1 {
+            22
+        } else if text.len() == 2 {
+            18
+        } else {
+            14
+        };
         let font = CreateFontW(
-            -font_size, 0, 0, 0,
+            -font_size,
+            0,
+            0,
+            0,
             FW_BOLD.0 as i32,
-            0, 0, 0,
+            0,
+            0,
+            0,
             FONT_CHARSET(0),
             OUT_TT_PRECIS,
             CLIP_DEFAULT_PRECIS,
@@ -820,7 +881,10 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
         let nudge_x: i32 = 0;
         let nudge_y: i32 = -1;
         let mut rc = windows::Win32::Foundation::RECT {
-            left: nudge_x, top: nudge_y, right: size + nudge_x, bottom: size + nudge_y,
+            left: nudge_x,
+            top: nudge_y,
+            right: size + nudge_x,
+            bottom: size + nudge_y,
         };
         DrawTextW(
             hdc,
@@ -831,7 +895,11 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
 
         // Read text coverage from red channel (white text on black = coverage in any channel)
         let mut text_mask = vec![0u8; (size * size) as usize];
-        for (i, item) in text_mask.iter_mut().enumerate().take((size * size) as usize) {
+        for (i, item) in text_mask
+            .iter_mut()
+            .enumerate()
+            .take((size * size) as usize)
+        {
             *item = *text_pixels.add(i * 4 + 2); // R channel
         }
 
@@ -842,7 +910,8 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
 
         // --- Pass 2: Compose final icon ---
         let mut final_bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let final_bmp = CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut final_bits, None, 0).ok()?;
+        let final_bmp =
+            CreateDIBSection(Some(hdc), &bmi, DIB_RGB_COLORS, &mut final_bits, None, 0).ok()?;
 
         let pixels = final_bits as *mut u8;
         std::ptr::write_bytes(pixels, 0, (size * size * 4) as usize);
@@ -882,7 +951,8 @@ fn create_badge_icon(count: u32, bg: [u8; 3], fg: [u8; 3]) -> Option<windows::Wi
                     let coverage = (c00 * (1.0 - fx) * (1.0 - fy)
                         + c10 * fx * (1.0 - fy)
                         + c01 * (1.0 - fx) * fy
-                        + c11 * fx * fy) / 255.0;
+                        + c11 * fx * fy)
+                        / 255.0;
 
                     // Blend: text foreground over background, then apply circle alpha
                     let out_r = fg[0] as f32 * coverage + bg[0] as f32 * (1.0 - coverage);
@@ -926,7 +996,9 @@ fn set_badge_count_macos(count: Option<u32>) {
     use objc2_app_kit::NSApplication;
     use objc2_foundation::NSString;
 
-    let Some(mtm) = MainThreadMarker::new() else { return };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
     let app = NSApplication::sharedApplication(mtm);
     let dock_tile = app.dockTile();
     match count {
@@ -993,7 +1065,11 @@ mod tests {
         config.title = "Test App".to_string();
         let menu = super::create_default_macos_menu(&config);
         let items = menu.items();
-        assert_eq!(items.len(), 2, "Menu should have exactly 2 submenus (App and Edit)");
+        assert_eq!(
+            items.len(),
+            2,
+            "Menu should have exactly 2 submenus (App and Edit)"
+        );
     }
 
     #[test]
@@ -1011,6 +1087,10 @@ mod tests {
         config.about_comments = Some("A test application".to_string());
         let menu = super::create_default_macos_menu(&config);
         let items = menu.items();
-        assert_eq!(items.len(), 2, "Menu should have exactly 2 submenus (App and Edit)");
+        assert_eq!(
+            items.len(),
+            2,
+            "Menu should have exactly 2 submenus (App and Edit)"
+        );
     }
 }
