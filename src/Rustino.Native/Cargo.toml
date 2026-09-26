@@ -10,7 +10,7 @@ name = "rustino_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-tao = "0.33"
+tao = "0.34"
 wry = "0.55"
 image = { version = "0.25", default-features = false, features = ["ico", "png", "jpeg"] }
 rfd = "0.15"
